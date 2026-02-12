@@ -22,9 +22,10 @@ nombres_columnas <- c(
   "nhr", "hnr", "rpde", "dfa", "ppe"
 )
 parkinson_df <- read.csv("parkinsons_updrs.data", header = TRUE, col.names = nombres_columnas)
+
 ```
 
-You can add options to executable code like this
+## Exploración De Datos
 
 ```{r}
 #| echo: false
