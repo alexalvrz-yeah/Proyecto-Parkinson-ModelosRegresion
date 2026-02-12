@@ -1,0 +1,34 @@
+---
+title: "Documento"
+format: html
+editor: visual
+---
+
+## Librerías
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(stats)
+```
+
+## Lectura De Datos
+
+```{r}
+nombres_columnas <- c(
+  "subject", "age", "sex", "test_time", "motor_UPDRS", "total_UPDRS", 
+  "jitter_pct", "jitter_abs", "jitter_rap", "jitter_ppq5", "jitter_ddp",
+  "shimmer", "shimmer_db", "shimmer_apq3", "shimmer_apq5", "shimmer_apq11", "shimmer_dda",
+  "nhr", "hnr", "rpde", "dfa", "ppe"
+)
+parkinson_df <- read.csv("parkinsons_updrs.data", header = TRUE, col.names = nombres_columnas)
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
