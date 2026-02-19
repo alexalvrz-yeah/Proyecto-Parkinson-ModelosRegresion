@@ -1,18 +1,44 @@
 ---
-title: "Documento"
-format: html
-editor: visual
+title: "Trabajo de Modelos de Regresión - Parkinson"
+subtitle: "Grado en Ciencia e Ingeniería de Datos – Universidad Rey Juan Carlos"
+author: 
+  -  Alejandro Álvarez Segoviano
+  -  Ivo Reguero Ferrer
+date: 04/30/2026
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+  pdf:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+lang: es
 ---
+
+## Introducción
+
+Encontrar que factores causan parkinson/lo hacen más grave, con nuestro modelo (lo desarrollaré luego, para presentarlo mejor).
 
 ## Librerías
 
-```{r}
+```{r warnings=FALSE}
 library(dplyr)
 library(ggplot2)
 library(stats)
 ```
 
-## Lectura De Datos
+## Lectura y descripción de Datos
+
+### Lectura de Datos
 
 ```{r}
 nombres_columnas <- c(
@@ -22,14 +48,74 @@ nombres_columnas <- c(
   "nhr", "hnr", "rpde", "dfa", "ppe"
 )
 parkinson_df <- read.csv("parkinsons_updrs.data", header = TRUE, col.names = nombres_columnas)
-
+head(parkinson_df)
 ```
+
+### Descripción de Datos
+
+Pondré aquí una tablita en la que explicaré que significa cada variable.
+
+## Preparación de Datos
+
+### Limpieza de Datos
+
+Comprobar si hay algún error de medición (ya que no hay ningún missing value según la web).
+
+### Partición de Datos
+
+Después de limpiarlos, habrá que cortarlos (usando este código adaptado a nuestro dataset).
+
+```{r}
+"
+# mediante una semilla conseguimos que el ejercicio sea reproducible
+set.seed(1)
+
+# creamos índices
+indices <- 1:ntotal
+ntrain <- ntotal * .5
+ntest <- ntotal * .25
+nval <- ntotal - (ntrain+ntest)
+indices.train <- sample(indices, ntrain, replace = FALSE)
+indices.test <- sample(indices[-indices.train],ntest,replace=FALSE)
+indices.val <- indices[-c(indices.train,indices.test)]
+
+# Usamos el 50% de la base de datos como conjunto de entrenamiento
+# 25% para test
+# 25% para validación
+train  <- SeoulBikeData[indices.train, ]
+test   <- SeoulBikeData[indices.test, ]
+val   <- SeoulBikeData[indices.val, ]
+# mediante una semilla conseguimos que el ejercicio sea reproducible
+set.seed(1)
+
+# creamos índices
+indices <- 1:ntotal
+ntrain <- ntotal * .5
+ntest <- ntotal * .25
+nval <- ntotal - (ntrain+ntest)
+indices.train <- sample(indices, ntrain, replace = FALSE)
+indices.test <- sample(indices[-indices.train],ntest,replace=FALSE)
+indices.val <- indices[-c(indices.train,indices.test)]
+
+# Usamos el 50% de la base de datos como conjunto de entrenamiento
+# 25% para test
+# 25% para validación
+train  <- SeoulBikeData[indices.train, ]
+test   <- SeoulBikeData[indices.test, ]
+val   <- SeoulBikeData[indices.val, ]
+"
+```
+
+------------------------------------------------------------------------
 
 ## Exploración De Datos
 
+Podríamos utilizar la misma presentación de todos los histogramas al mismo tiempo que usamos en inferencia de datos.
+
 ```{r}
-#| echo: false
-2 * 2
+#
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+### Cosas por hacer
+
+Me han mencionado que hemos de hacer, también en esta práctica, la separación train test validate. (recomienda hacerlo con todos los datos, no sin antes comprobar si los datos son lógicos).
