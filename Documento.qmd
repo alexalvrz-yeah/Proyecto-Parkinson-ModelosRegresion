@@ -22,11 +22,22 @@ execute:
   warning: false
   message: false
 lang: es
+editor: 
+  markdown: 
+    wrap: 72
 ---
 
 ## Introducción
 
-Encontrar que factores causan parkinson/lo hacen más grave, con nuestro modelo (lo desarrollaré luego, para presentarlo mejor).
+En este trabajo, vamos a procesar un dataset acerca del Parkinson. En el
+dataset, se guardan los datos de `42` personas con la enfermedad de
+Parkinson en etapas prontías. Hay alrededor de `200` mediciones de cada
+paciente, para un total de `5875` mediciones. Específicamente, lo que se
+hace en cada medición es guardar datos de la voz de los pacientes.
+
+El objetivo principal de los datos es poder predecir `motor_UPDRS` y
+`total_UDPRS` a partir de las otras `16` variables. Hay un total de `19`
+variables, teniendo en cuenta que una de ellas es la ID del paciente.
 
 ## Librerías
 
@@ -49,21 +60,52 @@ nombres_columnas <- c(
 )
 parkinson_df <- read.csv("parkinsons_updrs.data", header = TRUE, col.names = nombres_columnas)
 head(parkinson_df)
+summary(parkinson_df)
 ```
 
 ### Descripción de Datos
 
-Pondré aquí una tablita en la que explicaré que significa cada variable.
+En esta tabla, se explicarán cada una de las variables.
+
+| Columha | Descripción | Observación |
+|------------------------|------------------------|------------------------|
+| `subject#` | Entero que identifica a cada paciente. | Del 1 al 42. |
+| `age` | Edad del paciente, en años enteros. |  |
+| `sex` | Sexo del paciente, booleano. | "0" es hombre, "1" es mujer. |
+| `test_time` | Tiempo desde que se toman datos del sujeto, en días. | Parece que hay valores en negativo, habrá que cambiarlos si se demuestra que son errores. |
+| `motor_UPDRS` | Puntuación UPDRS medida por un médico clínico (Exclusivamente la parte motor). | Interpolada linealmente. |
+| `total_UPDRS` | Puntuación UPDRS total medida por un médico clínico. | Interpolada linealmente. |
+| `Jitter*` | Medidas acerca de la variación de la frecuencia fundamental de la voz. | Son Jitter(%), Jitter(Abs), Jitter:RAP, Jitter:PPQ5 y Jitter:DDP. En castellano, jitter significa vibrar, temblar. |
+| `Shimmer*` | Medidas acerca de la variación en amplitud de la voz. | Son Shimmer, Shimmer(dB), Shimmer:APQ3, Shimmer:APQ5, Shimmer:APQ11 y Shimmer:DDA. En castellano, shimmer significa titilar. |
+| `NHR` y `HNR` | Medidas del ratio del sonido a componentes tonales de la voz. |  |
+| `RPDE` | Medida no linear dinámica de la complejidad. | Al buscarlo en internet, me aparecen solamente estudios en los que se usa este dataset y "Rapidly Progressive Dementia Evaluation", que no parece tener mucho que ver con nuestro dataset. |
+| `DFA` | Exponente de escalado de señal fractal. | "Detrended Fluctuation Analysis", medida relacionada a señales. |
+| `PPE` | Medida no lineal de la variación fundamental de la frecuencia. |  |
+
+UPDRS son las siglas de "Unified Parkinson's Disease Rating Scale". Ya
+que este test no se hace todos los días al paciente, existen algunas
+observaciones no enteras porque se hace interpolación lineal entre el
+test más reciente y el test posterior.
+
+En la descripción de datos del propio dataset también aparecen todos los
+`Jitter` y `Shimmer` juntos, con esa misma descripción (no se nos indica
+cuál es la diferencia entre las variables).
 
 ## Preparación de Datos
 
 ### Limpieza de Datos
 
-Comprobar si hay algún error de medición (ya que no hay ningún missing value según la web).
+Comprobar si hay algún error de medición (ya que no hay ningún missing
+value según la web).
+
+Habría, probablemente, que quitar la variable del sujeto y comprobar si
+los valores atípicos son factibles (quitar los días negativos de
+`test_time`, por ejemplo).
 
 ### Partición de Datos
 
-Después de limpiarlos, habrá que cortarlos (usando este código adaptado a nuestro dataset).
+Después de limpiarlos, habrá que cortarlos (usando este código adaptado
+a nuestro dataset).
 
 ```{r}
 "
@@ -110,7 +152,8 @@ val   <- SeoulBikeData[indices.val, ]
 
 ## Exploración De Datos
 
-Podríamos utilizar la misma presentación de todos los histogramas al mismo tiempo que usamos en inferencia de datos.
+Podríamos utilizar la misma presentación de todos los histogramas al
+mismo tiempo que usamos en inferencia de datos.
 
 ```{r}
 #
@@ -118,4 +161,6 @@ Podríamos utilizar la misma presentación de todos los histogramas al mismo tie
 
 ### Cosas por hacer
 
-Me han mencionado que hemos de hacer, también en esta práctica, la separación train test validate. (recomienda hacerlo con todos los datos, no sin antes comprobar si los datos son lógicos).
+Me han mencionado que hemos de hacer, también en esta práctica, la
+separación train test validate. (recomienda hacerlo con todos los datos,
+no sin antes comprobar si los datos son lógicos).
