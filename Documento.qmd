@@ -41,7 +41,7 @@ variables, teniendo en cuenta que una de ellas es la ID del paciente.
 
 ## Librerías
 
-```{r warnings=FALSE}
+```{r warnings=FALSE, message=FALSE}
 library(dplyr)
 library(ggplot2)
 library(stats)
