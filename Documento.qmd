@@ -109,12 +109,12 @@ ntotal = 42 # total de pacientes
 # para evitar que salgan numeros no enteros
 lista <- as.vector(list(sample(1 : ntotal, size = ntotal, replace = F)))
 
-# Usamos el 50% de la base de datos como conjunto de entrenamiento
-# mas o menos 25% (11) para test
-# mas o menos 25% (10) para validación
-train  <- subset(parkinson_df, subject %in% lista[[1]][1:21]) # 21 sujetos
-test  <- subset(parkinson_df, subject %in% lista[[1]][22:32]) # 11
-val  <- subset(parkinson_df, subject %in% lista[[1]][33:42]) # 10
+# Usamos el 72% (30) de la base de datos como conjunto de entrenamiento
+# mas o menos 14% (6) para test
+# mas o menos 14% (6) para validación
+train  <- subset(parkinson_df, subject %in% lista[[1]][1:30]) # 30 sujetos
+test  <- subset(parkinson_df, subject %in% lista[[1]][31:36]) # 6
+val  <- subset(parkinson_df, subject %in% lista[[1]][37:42]) # 6
 
 
 head(train)
