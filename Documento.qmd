@@ -45,6 +45,7 @@ variables, teniendo en cuenta que una de ellas es la ID del paciente.
 library(dplyr)
 library(ggplot2)
 library(stats)
+library(gridExtra)
 ```
 
 ## Lectura y descripción de Datos
@@ -59,8 +60,6 @@ nombres_columnas <- c(
   "nhr", "hnr", "rpde", "dfa", "ppe"
 )
 parkinson_df <- read.csv("parkinsons_updrs.data", header = TRUE, col.names = nombres_columnas)
-head(parkinson_df)
-summary(parkinson_df)
 ```
 
 ### Descripción de Datos
@@ -78,7 +77,7 @@ En esta tabla, se explicarán cada una de las variables.
 | `Jitter*` | Medidas acerca de la variación de la frecuencia fundamental de la voz. | Son Jitter(%), Jitter(Abs), Jitter:RAP, Jitter:PPQ5 y Jitter:DDP. En castellano, jitter significa vibrar, temblar. |
 | `Shimmer*` | Medidas acerca de la variación en amplitud de la voz. | Son Shimmer, Shimmer(dB), Shimmer:APQ3, Shimmer:APQ5, Shimmer:APQ11 y Shimmer:DDA. En castellano, shimmer significa titilar. |
 | `NHR` y `HNR` | Medidas del ratio del sonido a componentes tonales de la voz. |  |
-| `RPDE` | Medida no linear dinámica de la complejidad. | Al buscarlo en internet, me aparecen solamente estudios en los que se usa este dataset y "Rapidly Progressive Dementia Evaluation", que no parece tener mucho que ver con nuestro dataset. |
+| `RPDE` | Medida no linear dinámica de la complejidad. | Siglas que significan "Rapidly Progressive Dementia Evaluation". Al fin y al cabo, el parkinson está relacionado con la pérdida de memoria. |
 | `DFA` | Exponente de escalado de señal fractal. | "Detrended Fluctuation Analysis", medida relacionada a señales. |
 | `PPE` | Medida no lineal de la variación fundamental de la frecuencia. |  |
 
@@ -93,74 +92,137 @@ cuál es la diferencia entre las variables).
 
 ## Preparación de Datos
 
+### Partición de Datos
+
+Después de limpiarlos, habrá que cortarlos (usando este código adaptado
+a nuestro dataset). En este caso, no vamos a hacer una partición
+aleatoria directamente, vamos a escoger ciertos subjects para cada una
+de las particiones.
+
+```{r}
+
+# mediante una semilla conseguimos que el ejercicio sea reproducible
+set.seed(123)
+
+# creamos índices
+ntotal = 42 # total de pacientes
+# para evitar que salgan numeros no enteros
+lista <- as.vector(list(sample(1 : ntotal, size = ntotal, replace = F)))
+
+# Usamos el 50% de la base de datos como conjunto de entrenamiento
+# mas o menos 25% (11) para test
+# mas o menos 25% (10) para validación
+train  <- subset(parkinson_df, subject %in% lista[[1]][1:21]) # 21 sujetos
+test  <- subset(parkinson_df, subject %in% lista[[1]][22:32]) # 11
+val  <- subset(parkinson_df, subject %in% lista[[1]][33:42]) # 10
+
+
+head(train)
+summary(train)
+```
+
 ### Limpieza de Datos
+
+Todo se hace a partir de ahora sobre train.
+
+Subject es una variable que no vamos a usar para predecir, debido a que
+es una ID. No la vamos a borrar (gracias a que los datos que nos van a
+llegar van a tener un paciente asociado también).
 
 Comprobar si hay algún error de medición (ya que no hay ningún missing
 value según la web).
 
-Habría, probablemente, que quitar la variable del sujeto y comprobar si
-los valores atípicos son factibles (quitar los días negativos de
-`test_time`, por ejemplo).
-
-### Partición de Datos
-
-Después de limpiarlos, habrá que cortarlos (usando este código adaptado
-a nuestro dataset).
-
-```{r}
-"
-# mediante una semilla conseguimos que el ejercicio sea reproducible
-set.seed(1)
-
-# creamos índices
-indices <- 1:ntotal
-ntrain <- ntotal * .5
-ntest <- ntotal * .25
-nval <- ntotal - (ntrain+ntest)
-indices.train <- sample(indices, ntrain, replace = FALSE)
-indices.test <- sample(indices[-indices.train],ntest,replace=FALSE)
-indices.val <- indices[-c(indices.train,indices.test)]
-
-# Usamos el 50% de la base de datos como conjunto de entrenamiento
-# 25% para test
-# 25% para validación
-train  <- SeoulBikeData[indices.train, ]
-test   <- SeoulBikeData[indices.test, ]
-val   <- SeoulBikeData[indices.val, ]
-# mediante una semilla conseguimos que el ejercicio sea reproducible
-set.seed(1)
-
-# creamos índices
-indices <- 1:ntotal
-ntrain <- ntotal * .5
-ntest <- ntotal * .25
-nval <- ntotal - (ntrain+ntest)
-indices.train <- sample(indices, ntrain, replace = FALSE)
-indices.test <- sample(indices[-indices.train],ntest,replace=FALSE)
-indices.val <- indices[-c(indices.train,indices.test)]
-
-# Usamos el 50% de la base de datos como conjunto de entrenamiento
-# 25% para test
-# 25% para validación
-train  <- SeoulBikeData[indices.train, ]
-test   <- SeoulBikeData[indices.test, ]
-val   <- SeoulBikeData[indices.val, ]
-"
-```
+Habría, probablemente, que comprobar si los valores atípicos son
+factibles (quitar los días negativos de `test_time`, por ejemplo).
 
 ------------------------------------------------------------------------
 
 ## Exploración De Datos
 
-Podríamos utilizar la misma presentación de todos los histogramas al
-mismo tiempo que usamos en inferencia de datos.
+Para explorar todo al mismo tiempo, usaremos muchos histogramas al mismo
+tiempo. No haré histogramas del sexo, la ID y la edad porque no es
+lógico hacerlo.
 
 ```{r}
-#
+# Por editar
+'
+#Obtengo todas las medias para representarlas en los histogramas
+media_test_time <- mean(train$`test_time`)
+media_motor_UPDRS <- mean(train$`motor_UPDRS`)
+media_total_UPDRS <- mean(train$`total_UPDRS`)
+media_jitter_pct <- mean(train$`jitter_pct`)
+media_jitter_abs <- mean(train$`jitter_abs`)
+media_jitter_rap <- mean(train$`jitter_rap`)
+media_jitter_ppq5 <- mean(train$`jitter_ppq5`)
+media_jitter_ddp <- mean(train$`jitter_ddp`)
+media_shimmer <- mean(train$`shimmer`)
+media_shimmer_db <- mean(train$`shimmer_db`)
+media_shimmer_apq3 <- mean(train$`shimmer_apq3`)
+media_shimmer_apq5 <- mean(train$`shimmer_apq5`)
+media_shimmer_apq11 <- mean(train$`shimmer_apq11`)
+media_shimmer_dda <- mean(train$`shimmer_dda`)
+media_nhr <- mean(train$`nhr`)
+media_hnr <- mean(train$`hnr`)
+media_rpde <- mean(train$`rpde`)
+media_dfa <- mean(train$`dfa`)
+media_ppe <- mean(train$`ppe`)
+
+# Creo los histogramas de cada variable, uno por uno, con una línea roja que indica dónde está la media.
+
+hist1 <- ggplot(data = train, mapping = aes(x = .data[["test_time"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_test_time, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de test_time", x = "Cantidad de días", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist2 <- ggplot(data = train, mapping = aes(x = .data[["motor_UPDRS"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_motor_UPDRS, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de motor_UPDRS", x = "Puntuación", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist3 <- ggplot(data = train, mapping = aes(x = .data[["total_UPDRS"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_total_UPDRS, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de total_UPDRS", x = "Puntuación", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+
+
+# Coloco todos los histogramas juntos.
+grid.arrange(hist1, hist2, hist3, hist4, hist5, hist6, hist7, hist8, hist9, hist10, hist11, hist12, hist13, hist14, hist15, hist16, hist17, hist18, hist19, nrow=10)
+'
+# de prueba, el resto han de hacerse en el comentario
+
+media_test_time <- mean(train$`test_time`)
+media_motor_UPDRS <- mean(train$`motor_UPDRS`)
+media_total_UPDRS <- mean(train$`total_UPDRS`)
+
+hist1 <- ggplot(data = train, mapping = aes(x = .data[["test_time"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_test_time, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de test_time", x = "Cantidad de días", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist2 <- ggplot(data = train, mapping = aes(x = .data[["motor_UPDRS"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_motor_UPDRS, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de motor_UPDRS", x = "Puntuación", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist3 <- ggplot(data = train, mapping = aes(x = .data[["total_UPDRS"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_total_UPDRS, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de total_UPDRS", x = "Puntuación", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+
+grid.arrange(hist1, hist2, hist3, nrow=2)
 ```
 
 ### Cosas por hacer
 
-Me han mencionado que hemos de hacer, también en esta práctica, la
-separación train test validate. (recomienda hacerlo con todos los datos,
-no sin antes comprobar si los datos son lógicos).
+Se ha de hacer la partición antes de limpiar los datos, si hago alguna
+transformación en train he de hacerla después en las otras particiones.
+
+Hay que hacer los histogramas.
