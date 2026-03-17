@@ -125,9 +125,9 @@ summary(train)
 
 Todo se hace a partir de ahora sobre train.
 
-Subject es una variable que no vamos a usar para predecir, debido a que
-es una ID. No la vamos a borrar (gracias a que los datos que nos van a
-llegar van a tener un paciente asociado también).
+`Subject` es una variable que no vamos a usar para predecir, debido a
+que es una ID. No la vamos a borrar (gracias a que los datos que nos van
+a llegar van a tener un paciente asociado también).
 
 Comprobar si hay algún error de medición (ya que no hay ningún missing
 value según la web).
@@ -143,7 +143,7 @@ Para explorar todo al mismo tiempo, usaremos muchos histogramas al mismo
 tiempo. No haré histogramas del sexo, la ID y la edad porque no es
 lógico hacerlo.
 
-```{r}
+```{r message=FALSE}
 # Por editar
 '
 #Obtengo todas las medias para representarlas en los histogramas
@@ -226,3 +226,10 @@ Se ha de hacer la partición antes de limpiar los datos, si hago alguna
 transformación en train he de hacerla después en las otras particiones.
 
 Hay que hacer los histogramas.
+
+No hacer una regresión en la cual tengamos dos variables objetivo,
+escoger entre una de las dos.
+
+PCA? O usar descarte de variables? Pensar luego.
+
+"La gracia es ir probando cosas, no hacer el mejor modelo".
