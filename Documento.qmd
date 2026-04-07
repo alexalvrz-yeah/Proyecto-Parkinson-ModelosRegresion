@@ -30,8 +30,9 @@ editor:
 ## Introducción
 
 En este trabajo, vamos a procesar un dataset acerca del Parkinson. En el
-dataset, se guardan los datos de `42` personas con la enfermedad de
-Parkinson en etapas prontías. Hay alrededor de `200` mediciones de cada
+dataset, se guardan los datos de `42` personas de los Estados Unidos de
+América, con la enfermedad de Parkinson en etapas prontías, en un total
+de 6 centros médicos. Hay alrededor de `200` mediciones de cada
 paciente, para un total de `5875` mediciones. Específicamente, lo que se
 hace en cada medición es guardar datos de la voz de los pacientes.
 
@@ -48,7 +49,7 @@ library(stats)
 library(gridExtra)
 ```
 
-## Lectura y descripción de Datos
+## Lectura y Descripción de Datos
 
 ### Lectura de Datos
 
@@ -70,7 +71,7 @@ En esta tabla, se explicarán cada una de las variables.
 |------------------------|------------------------|------------------------|
 | `subject#` | Entero que identifica a cada paciente. | Del 1 al 42. |
 | `age` | Edad del paciente, en años enteros. |  |
-| `sex` | Sexo del paciente, booleano. | "0" es hombre, "1" es mujer. |
+| `sex` | Sexo del paciente, booleano. | "0" es hombre, "1" es mujer. 28 hombres y 14 mujeres según la web. |
 | `test_time` | Tiempo desde que se toman datos del sujeto, en días. | Parece que hay valores en negativo, habrá que cambiarlos si se demuestra que son errores. |
 | `motor_UPDRS` | Puntuación UPDRS medida por un médico clínico (Exclusivamente la parte motor). | Interpolada linealmente. |
 | `total_UPDRS` | Puntuación UPDRS total medida por un médico clínico. | Interpolada linealmente. |
@@ -123,51 +124,62 @@ summary(train)
 
 ### Limpieza de Datos
 
-Todo se hace a partir de ahora sobre train.
+Todo se hace a partir de ahora sobre train. Puede que haya errores en
+las otras particiones.
 
-`Subject` es una variable que no vamos a usar para predecir, debido a
+`subject` es una variable que no vamos a usar para predecir, debido a
 que es una ID. No la vamos a borrar (gracias a que los datos que nos van
 a llegar van a tener un paciente asociado también).
 
-Comprobar si hay algún error de medición (ya que no hay ningún missing
-value según la web).
+Podemos usar `subject` para saber si hay alguna medición extraña
+paciente a paciente (de repente cambia de edad más de un año, cambia de
+sexo, etcétera....)
 
-Habría, probablemente, que comprobar si los valores atípicos son
-factibles (quitar los días negativos de `test_time`, por ejemplo).
+```{r}
+train %>% count(subject, sex, age, sort=TRUE)
+```
+
+Se puede ver que no hay nada extraño, no hay ningún caso en el cual haya
+un paciente que haya sido marcado con dos sexos. Además, son siempre
+marcados con la misma edad (es improbable que ninguno haya cumplido años
+durante la duración de las pruebas, pero bueno).
+
+`test_time` tiene valores negativos. Teniendo en cuenta lo que
+significa, tendríamos que quitarlos (no tiene sentido que haya)
+
+```{r}
+# por hacer
+```
 
 ------------------------------------------------------------------------
 
-## Exploración De Datos
+## Exploración de Datos
 
 Para explorar todo al mismo tiempo, usaremos muchos histogramas al mismo
 tiempo. No haré histogramas del sexo, la ID y la edad porque no es
-lógico hacerlo.
+lógico hacerlo. Eso sí, exploraré el sexo y la ID.
 
-```{r message=FALSE}
-# Por editar
-'
-#Obtengo todas las medias para representarlas en los histogramas
-media_test_time <- mean(train$`test_time`)
-media_motor_UPDRS <- mean(train$`motor_UPDRS`)
-media_total_UPDRS <- mean(train$`total_UPDRS`)
-media_jitter_pct <- mean(train$`jitter_pct`)
-media_jitter_abs <- mean(train$`jitter_abs`)
-media_jitter_rap <- mean(train$`jitter_rap`)
-media_jitter_ppq5 <- mean(train$`jitter_ppq5`)
-media_jitter_ddp <- mean(train$`jitter_ddp`)
-media_shimmer <- mean(train$`shimmer`)
-media_shimmer_db <- mean(train$`shimmer_db`)
-media_shimmer_apq3 <- mean(train$`shimmer_apq3`)
-media_shimmer_apq5 <- mean(train$`shimmer_apq5`)
-media_shimmer_apq11 <- mean(train$`shimmer_apq11`)
-media_shimmer_dda <- mean(train$`shimmer_dda`)
-media_nhr <- mean(train$`nhr`)
-media_hnr <- mean(train$`hnr`)
-media_rpde <- mean(train$`rpde`)
-media_dfa <- mean(train$`dfa`)
-media_ppe <- mean(train$`ppe`)
+```{r message=FALSE, fig.height=30, fig.width=8}
 
-# Creo los histogramas de cada variable, uno por uno, con una línea roja que indica dónde está la media.
+media_test_time <- mean(train$test_time)
+media_motor_UPDRS <- mean(train$motor_UPDRS)
+media_total_UPDRS <- mean(train$total_UPDRS)
+media_jitter_pct <- mean(train$jitter_pct)
+media_jitter_abs <- mean(train$jitter_abs)
+media_jitter_rap <- mean(train$jitter_rap)
+media_jitter_ppq5 <- mean(train$jitter_ppq5)
+media_jitter_ddp <- mean(train$jitter_ddp)
+media_shimmer <- mean(train$shimmer)
+media_shimmer_db <- mean(train$shimmer_db)
+media_shimmer_apq3 <- mean(train$shimmer_apq3)
+media_shimmer_apq5 <- mean(train$shimmer_apq5)
+media_shimmer_apq11 <- mean(train$shimmer_apq11)
+media_shimmer_dda <- mean(train$shimmer_dda)
+media_nhr <- mean(train$nhr)
+media_hnr <- mean(train$hnr)
+media_rpde <- mean(train$rpde)
+media_dfa <- mean(train$dfa)
+media_ppe <- mean(train$ppe)
 
 hist1 <- ggplot(data = train, mapping = aes(x = .data[["test_time"]])) + #datos
   geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
@@ -187,38 +199,198 @@ hist3 <- ggplot(data = train, mapping = aes(x = .data[["total_UPDRS"]])) + #dato
   labs(title = "Distribución de total_UPDRS", x = "Puntuación", y = "Frecuencia" ) + #leyenda
   theme_minimal() #tema
 
+hist4 <- ggplot(data = train, mapping = aes(x = .data[["jitter_pct"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_jitter_pct, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de jitter_pct", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist5 <- ggplot(data = train, mapping = aes(x = .data[["jitter_abs"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_jitter_abs, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de jitter_abs", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist6 <- ggplot(data = train, mapping = aes(x = .data[["jitter_rap"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_jitter_rap, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de jitter_rap", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist7 <- ggplot(data = train, mapping = aes(x = .data[["jitter_ppq5"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_jitter_ppq5, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de jitter_ppq5", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist8 <- ggplot(data = train, mapping = aes(x = .data[["jitter_ddp"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_jitter_ddp, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de jitter_ddp", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist9 <- ggplot(data = train, mapping = aes(x = .data[["shimmer"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_shimmer, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de shimmer", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist10 <- ggplot(data = train, mapping = aes(x = .data[["shimmer_db"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_shimmer_db, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de shimmer_db", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist11 <- ggplot(data = train, mapping = aes(x = .data[["shimmer_apq3"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_shimmer_apq3, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de shimmer_apq3", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist12 <- ggplot(data = train, mapping = aes(x = .data[["shimmer_apq5"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_shimmer_apq5, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de shimmer_apq5", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist13 <- ggplot(data = train, mapping = aes(x = .data[["shimmer_apq11"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_shimmer_apq11, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de shimmer_apq11", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist14 <- ggplot(data = train, mapping = aes(x = .data[["shimmer_dda"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_shimmer_dda, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de shimmer_dda", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist15 <- ggplot(data = train, mapping = aes(x = .data[["nhr"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_nhr, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de nhr", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist16 <- ggplot(data = train, mapping = aes(x = .data[["hnr"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_hnr, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de hnr", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist17 <- ggplot(data = train, mapping = aes(x = .data[["rpde"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_rpde, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de rpde", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist18 <- ggplot(data = train, mapping = aes(x = .data[["dfa"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_dfa, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de dfa", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+
+hist19 <- ggplot(data = train, mapping = aes(x = .data[["ppe"]])) + #datos
+  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+  geom_vline(xintercept = media_ppe, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de ppe", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
 
 
-# Coloco todos los histogramas juntos.
 grid.arrange(hist1, hist2, hist3, hist4, hist5, hist6, hist7, hist8, hist9, hist10, hist11, hist12, hist13, hist14, hist15, hist16, hist17, hist18, hist19, nrow=10)
-'
-# de prueba, el resto han de hacerse en el comentario
+```
 
-media_test_time <- mean(train$`test_time`)
-media_motor_UPDRS <- mean(train$`motor_UPDRS`)
-media_total_UPDRS <- mean(train$`total_UPDRS`)
+Así de primeras, se pueden ver claramente dos grandes grupos de
+variables: los jitter\* y los shimmer\*. Cada uno de los integrantes del
+grupo es muy similar al resto, a excepción de jitter_abs. Vamos a actuar
+como si los grupos fuesen una sola variable, y si algo raro es visible
+en alguna de las variables se mencionará ahí. Se explorará como si fuese
+un grupo también las dos variables de UPDRS.
 
-hist1 <- ggplot(data = train, mapping = aes(x = .data[["test_time"]])) + #datos
-  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
+### test_time
+
+Parece una uniforme que se extiende desde el 0 hasta casi 200, a veces
+extendiéndose un poco más. Teniendo en cuenta que esta variable indica
+el día desde el comienzo del monitoreo del paciente, tiene sentido que
+sea uniforme al comienzo y que luego tenga algo de cola: todos los
+pacientes tienen un día 0 pero no todos terminan al mismo tiempo las
+pruebas. Destaca un "hueco" en la mitad (algo antes del 100) del
+histograma, que habrá que investigar. Pruebo un valor distinto de
+binwidth:
+
+```{r}
+ggplot(data = train, mapping = aes(x = .data[["test_time"]])) + #datos
+  geom_histogram(bins=50) + #histograma, dependiendo de la variable pondré otro valor de bins
   geom_vline(xintercept = media_test_time, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
   labs(title = "Distribución de test_time", x = "Cantidad de días", y = "Frecuencia" ) + #leyenda
   theme_minimal() #tema
 
-hist2 <- ggplot(data = train, mapping = aes(x = .data[["motor_UPDRS"]])) + #datos
-  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
-  geom_vline(xintercept = media_motor_UPDRS, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
-  labs(title = "Distribución de motor_UPDRS", x = "Puntuación", y = "Frecuencia" ) + #leyenda
-  theme_minimal() #tema
-
-hist3 <- ggplot(data = train, mapping = aes(x = .data[["total_UPDRS"]])) + #datos
-  geom_histogram() + #histograma, dependiendo de la variable pondré otro valor de bins
-  geom_vline(xintercept = media_total_UPDRS, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
-  labs(title = "Distribución de total_UPDRS", x = "Puntuación", y = "Frecuencia" ) + #leyenda
-  theme_minimal() #tema
-
-
-grid.arrange(hist1, hist2, hist3, nrow=2)
+head(train$test_time)
 ```
+
+Se puede ver que el hueco sigue existiendo. Esto puede ser causado por
+algo de la vida real. Al caer la línea en el hueco, se podría suponer
+que algunos pacientes devolvieron temporalmente el medidor a petición
+del médico, para guardar los datos ya medidos, por ejemplo. También
+podemos ver con esto que no todos los días se toman mediciones. En el
+caso de lo que se muestra con el head(), podemos ver que se hace una
+medición una vez a la semana.
+
+Otro dato interesante, visto con el head() es que los días no son
+medidos con enteros, son valores contínuos. En la página web no indica
+qué significan los valores decimales, tan sólo dice que la parte entera
+son los días desde que comenzaron las pruebas.
+
+### motor_UPDRS y total_UPDRS
+
+Algo muy a tener en cuenta cuando exploremos estas variables es que el
+dataset es de 2009, es muy probable que haya cambiado bastante el test
+UPDRS.
+
+### jitter\*
+
+### shimmer\*
+
+### nhr
+
+### hnr
+
+### rpde
+
+### dfa
+
+### ppe
+
+### age
+
+### sex
+
+El sexo de los pacientes, según la página web es 28 hombres y 14
+mujeres. Conocer esto es "hacer trampa" ya que no deberíamos de saberlo
+(no deberíamos de saber nada acerca de test y validation), pero bueno.
+
+```{r}
+# teniendo en cuenta lo de arriba, fabricando un dataset nuevo para evitar hacer código raro
+df <- data.frame(
+  sexo = c("Masculino", "Femenino"), 
+  y = c(19, 11)
+)
+ggplot(df, aes(sexo, y, fill=sexo)) + labs(sexo = NULL, y = NULL) + geom_bar(stat = "identity") + scale_fill_manual(values=c("pink","blue")) + ggtitle("Sexo de los pacientes") 
+```
+
+Hay 19 hombres y 11 mujeres, cosa que sabemos gracias al código que
+hicimos en la sección de limpieza de datos. Esto significa que puede que
+nuestro modelo esté sesgado después si los síntomas o mediciones son
+distintos entre hombres y mujeres, al ser el ratio distinto entre train
+y las otras particiones/el dataset completo.
+
+------------------------------------------------------------------------
+
+## PCA o Selección de Variables
+
+Luego de hacer algo del EDA empezar esto. Eso sí, hay que hacer más
+cosas que faltan por añadir después abajo.
+
+------------------------------------------------------------------------
 
 ### Cosas por hacer
 
@@ -233,3 +405,8 @@ escoger entre una de las dos.
 PCA? O usar descarte de variables? Pensar luego.
 
 "La gracia es ir probando cosas, no hacer el mejor modelo".
+
+<https://ieeexplore.ieee.org/document/5339170> paper original
+
+Antes de hacer las cosas con las otras particiones hemos de limpiarlas
+con las mismas transformaciones que hicimos en train.
