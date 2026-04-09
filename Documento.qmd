@@ -371,10 +371,10 @@ mujeres. Conocer esto es "hacer trampa" ya que no deberíamos de saberlo
 ```{r}
 # teniendo en cuenta lo de arriba, fabricando un dataset nuevo para evitar hacer código raro
 df <- data.frame(
-  sexo = c("Masculino", "Femenino"), 
+  sexo = c("0", "1"), 
   y = c(19, 11)
 )
-ggplot(df, aes(sexo, y, fill=sexo)) + labs(sexo = NULL, y = NULL) + geom_bar(stat = "identity") + scale_fill_manual(values=c("pink","blue")) + ggtitle("Sexo de los pacientes") 
+ggplot(df, aes(sexo, y, fill=sexo)) + labs(sexo = NULL, y = NULL) + geom_bar(stat = "identity") + scale_fill_manual(values=c("blue","pink")) + ggtitle("Sexo de los pacientes") 
 ```
 
 Hay 19 hombres y 11 mujeres, cosa que sabemos gracias al código que
@@ -385,10 +385,15 @@ y las otras particiones/el dataset completo.
 
 ------------------------------------------------------------------------
 
+## Aplicación del Modelo de Regresión
+
+aaaaa
+
+------------------------------------------------------------------------
+
 ## PCA o Selección de Variables
 
-Luego de hacer algo del EDA empezar esto. Eso sí, hay que hacer más
-cosas que faltan por añadir después abajo.
+aaaaa
 
 ------------------------------------------------------------------------
 
