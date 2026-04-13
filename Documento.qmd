@@ -47,6 +47,7 @@ library(dplyr)
 library(ggplot2)
 library(stats)
 library(gridExtra)
+library(reshape2)
 ```
 
 ## Lectura y Descripción de Datos
@@ -113,13 +114,13 @@ lista <- as.vector(list(sample(1 : ntotal, size = ntotal, replace = F)))
 # Usamos el 72% (30) de la base de datos como conjunto de entrenamiento
 # mas o menos 14% (6) para test
 # mas o menos 14% (6) para validación
-train  <- subset(parkinson_df, subject %in% lista[[1]][1:30]) # 30 sujetos
-test  <- subset(parkinson_df, subject %in% lista[[1]][31:36]) # 6
-val  <- subset(parkinson_df, subject %in% lista[[1]][37:42]) # 6
+train_sucio  <- subset(parkinson_df, subject %in% lista[[1]][1:30]) # 30 sujetos
+test_sucio  <- subset(parkinson_df, subject %in% lista[[1]][31:36]) # 6
+val_sucio  <- subset(parkinson_df, subject %in% lista[[1]][37:42]) # 6
 
 
-head(train)
-summary(train)
+head(train_sucio)
+summary(train_sucio)
 ```
 
 ### Limpieza de Datos
@@ -136,7 +137,7 @@ paciente a paciente (de repente cambia de edad más de un año, cambia de
 sexo, etcétera....)
 
 ```{r}
-train %>% count(subject, sex, age, sort=TRUE)
+train_sucio %>% count(subject, sex, age, sort=TRUE)
 ```
 
 Se puede ver que no hay nada extraño, no hay ningún caso en el cual haya
@@ -144,11 +145,17 @@ un paciente que haya sido marcado con dos sexos. Además, son siempre
 marcados con la misma edad (es improbable que ninguno haya cumplido años
 durante la duración de las pruebas, pero bueno).
 
-`test_time` tiene valores negativos. Teniendo en cuenta lo que
-significa, tendríamos que quitarlos (no tiene sentido que haya)
+`test_time` tiene valores negativos. Además. es la única variable con
+valores negativos del dataset. Teniendo en cuenta lo que significa,
+vamos a quitarlos (no tiene sentido que haya)
 
 ```{r}
-# por hacer
+sapply(train_sucio, function(x) sum(is.na(x)))
+train_na <- train_sucio                  
+train_na[train_na < 0] <- NA  # como no hay NA entonces puedo convertirlos y borrarlos
+
+train <- na.omit(train_na)
+head(sort(train$test_time)) # ya no hay valores negativos, solo ceros
 ```
 
 ------------------------------------------------------------------------
@@ -342,13 +349,38 @@ son los días desde que comenzaron las pruebas.
 
 ### motor_UPDRS y total_UPDRS
 
-Algo muy a tener en cuenta cuando exploremos estas variables es que el
-dataset es de 2009, es muy probable que haya cambiado bastante el test
-UPDRS.
+Algo tener en cuenta cuando exploremos estas variables es que el dataset
+es de 2009, es muy probable que haya cambiado bastante el test UPDRS.
 
 ### jitter\*
 
+Estandarizamos para comparar:
+
+```{r message=FALSE}
+jitter_escalado <- scale(train[ ,7:11]) #jitter* de 7 a 11
+jitter_melt <- melt(jitter_escalado) # permite que pueda hacer la representación
+
+ggplot(data = jitter_melt, mapping = aes(x = Var2, y = value)) + geom_boxplot()
+```
+
+`jitter_abs` es distinto a los demás, como mencionamos antes, pero el
+resto son muy similares después de estandarizar (muchos valores lejanos
+a la cola superior del boxplot, caja de más o menos el mismo tamaño). La
+caja de `jitter_abs` es algo más ancha y tiene los valores "atípicos"
+bastante más cerca de la cola superior.
+
 ### shimmer\*
+
+Estandarizamos para comparar:
+
+```{r}
+shimmer_escalado <- scale(train[ ,12:17]) #shimmer* de 12 a 17
+shimmer_melt <- melt(shimmer_escalado) # permite que pueda hacer la representación
+
+ggplot(data = shimmer_melt, mapping = aes(x = Var2, y = value)) + geom_boxplot()
+```
+
+Estos seis son muy similares.
 
 ### nhr
 
@@ -415,3 +447,5 @@ PCA? O usar descarte de variables? Pensar luego.
 
 Antes de hacer las cosas con las otras particiones hemos de limpiarlas
 con las mismas transformaciones que hicimos en train.
+
+Faltan bastantes cosas del EDA.
