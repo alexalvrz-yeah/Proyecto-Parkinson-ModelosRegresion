@@ -347,10 +347,48 @@ medidos con enteros, son valores contínuos. En la página web no indica
 qué significan los valores decimales, tan sólo dice que la parte entera
 son los días desde que comenzaron las pruebas.
 
+En conclusión, era de esperar que no fuese una variable uniforme exacta
+gracias a que no todos los pacientes entregaron la misma cantidad de
+datos ni se hicieron las pruebas los mismos días, pero aún así destaca
+el pequeño hueco que hay en la mitad de la distribución.
+
 ### motor_UPDRS y total_UPDRS
 
-Algo tener en cuenta cuando exploremos estas variables es que el dataset
-es de 2009, es muy probable que haya cambiado bastante el test UPDRS.
+Algo a tener en cuenta cuando exploremos estas variables es que el
+dataset es de 2009, es muy probable que haya cambiado bastante el test
+UPDRS.
+
+Las distribuciones de los dos valores son raras, y no son parecidas
+entre sí. Sin embargo, han de tener relación, aunque no sepamos cuanta
+aún. Hagamos un par de operaciones para ver cómo de relacionadas están.
+
+Restemos y también dividamos el uno al otro para así ver si son
+separados por cantidades similares, y si influye siempre lo mismo el
+valor de `motor_UPDRS` en el total:
+
+```{r message=FALSE}
+updrs_diff <- train$total_UPDRS - train$motor_UPDRS
+ud_df <- data.frame(updrs_diff)
+ggplot(data = ud_df, mapping = aes(x = .data[["updrs_diff"]])) + 
+  geom_histogram() +
+  theme_minimal() 
+summary(updrs_diff)
+updrs_ratio <- train$motor_UPDRS / train$total_UPDRS
+ur_df <- data.frame(updrs_ratio)
+ggplot(data = ur_df, mapping = aes(x = .data[["updrs_ratio"]])) +
+  geom_histogram() +
+  theme_minimal() 
+summary(updrs_ratio)
+```
+
+Algunos pacientes se ven más afectados que otros por sus problemas
+motores (es lo que indica el ratio) y la diferencia nos indica que no
+suele aumentar lo mismo el total, por lo tanto estas dos variables no
+tienen una correlación enorme.
+
+Destaca en el histograma de `updrs_diff` lo que parece un solo paciente
+que consistentemente tiene diferencias cercanas a 20. **Preguntar cómo
+mostrar más limpio.**
 
 ### jitter\*
 
@@ -369,6 +407,11 @@ a la cola superior del boxplot, caja de más o menos el mismo tamaño). La
 caja de `jitter_abs` es algo más ancha y tiene los valores "atípicos"
 bastante más cerca de la cola superior.
 
+En cuanto a la distribución que siguen, se puede decir que tienen una
+forma bastante similar a una poisson con lambda baja, siendo que
+`jitter_abs` tendría la lambda más alta. **Preguntar por distribuciones
+continuas que tengan formas similares a esta, para así investigar.**
+
 ### shimmer\*
 
 Estandarizamos para comparar:
@@ -380,7 +423,14 @@ shimmer_melt <- melt(shimmer_escalado) # permite que pueda hacer la representaci
 ggplot(data = shimmer_melt, mapping = aes(x = Var2, y = value)) + geom_boxplot()
 ```
 
-Estos seis son muy similares.
+Estos seis son muy similares. Tienen una forma muy similar a la de
+`jitter_abs`, al menos mirando a la tabla de histogramas y al boxplot
+(en estos boxplots y en el de `jitter_abs`, hay valores atípicos hasta
+el valor 10 y la caja es algo más ancha que en el resto de jitters).
+
+La distribución que siguen recuerda de nuevo a una poisson con una
+lambda baja. **Preguntar por distribuciones continuas que tengan formas
+similares a esta, para así investigar.**
 
 ### nhr
 
@@ -393,6 +443,13 @@ Estos seis son muy similares.
 ### ppe
 
 ### age
+
+Vamos a representar las edades:
+
+```{r}
+# por hacer, no se como hacerlo
+# tener en cuenta que hay sujetos que tienen la misma edad y que no todos los sujetos tienen la misma cantidad de muestras
+```
 
 ### sex
 
