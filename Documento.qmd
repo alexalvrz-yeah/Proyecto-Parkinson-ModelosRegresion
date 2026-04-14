@@ -453,9 +453,9 @@ Vamos a representar las edades:
 
 ### sex
 
-El sexo de los pacientes, según la página web es 28 hombres y 14
-mujeres. Conocer esto es "hacer trampa" ya que no deberíamos de saberlo
-(no deberíamos de saber nada acerca de test y validation), pero bueno.
+El sexo de los pacientes según la página web es 28 hombres y 14 mujeres.
+Conocer esto es "hacer trampa" ya que no deberíamos de saberlo (no
+deberíamos de saber nada acerca de test y validation), pero bueno.
 
 ```{r}
 # teniendo en cuenta lo de arriba, fabricando un dataset nuevo para evitar hacer código raro
@@ -471,6 +471,12 @@ hicimos en la sección de limpieza de datos. Esto significa que puede que
 nuestro modelo esté sesgado después si los síntomas o mediciones son
 distintos entre hombres y mujeres, al ser el ratio distinto entre train
 y las otras particiones/el dataset completo.
+
+Según este paper,
+<!--# https://pmc.ncbi.nlm.nih.gov/articles/PMC11885646/ --> el riesgo
+de Parkinson es 1.5 veces mayor en hombres, haciendo así que nuestro
+subdataset `train` represente algo mejor la población general que todo
+el dataset.
 
 ------------------------------------------------------------------------
 
