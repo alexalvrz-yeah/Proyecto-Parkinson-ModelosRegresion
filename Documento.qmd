@@ -48,6 +48,7 @@ library(ggplot2)
 library(stats)
 library(gridExtra)
 library(reshape2)
+library(GGally)
 ```
 
 ## Lectura y Descripción de Datos
@@ -387,8 +388,22 @@ suele aumentar lo mismo el total, por lo tanto estas dos variables no
 tienen una correlación enorme.
 
 Destaca en el histograma de `updrs_diff` lo que parece un solo paciente
-que consistentemente tiene diferencias cercanas a 20. **Preguntar cómo
-mostrar más limpio.**
+que consistentemente tiene diferencias cercanas a 20.
+
+Ese paciente es el `subject` 25, el cual tiene el tercer `motor_UPDRS`
+más alto de toda la partición (en cierto momento, y comparado con otros
+sujetos). Los dos sujetos que llegan a tener un valor más alto que él
+son 37 y 39, los cuales poseen una `updrs_diff` cercana a 10 durante el
+tiempo en el cual tienen el `motor_UPDRS` más alto.
+
+Veamos la correlación entre ambos valores, quitando en el segundo caso
+al atípico 25 para ver si es tan influyente:
+
+```{r}
+updrs <- scale(train[ ,5:6]) # son la quinta y sexta columna
+cor(x = updrs)
+#por hacer
+```
 
 ### jitter\*
 
@@ -405,12 +420,19 @@ ggplot(data = jitter_melt, mapping = aes(x = Var2, y = value)) + geom_boxplot()
 resto son muy similares después de estandarizar (muchos valores lejanos
 a la cola superior del boxplot, caja de más o menos el mismo tamaño). La
 caja de `jitter_abs` es algo más ancha y tiene los valores "atípicos"
-bastante más cerca de la cola superior.
+bastante más cerca del 0.
 
-En cuanto a la distribución que siguen, se puede decir que tienen una
-forma bastante similar a una poisson con lambda baja, siendo que
-`jitter_abs` tendría la lambda más alta. **Preguntar por distribuciones
-continuas que tengan formas similares a esta, para así investigar.**
+Veamos las correlaciones:
+
+```{r}
+ggcorr(data = jitter_escalado, method = c("everything", "pearson"), label = TRUE, label_round = 3) # pearson es el supuesto default, ahora miro si hay alguno mejor
+```
+
+Se ve una correlación muy alta en todos excepto en los que se involucra
+`jitter_abs`. Otra vez, el valor más diferente es este.
+
+Se ve un 1 entre `rap` y `ddp`, una de las dos ha de ser borrada
+después.
 
 ### shimmer\*
 
@@ -428,9 +450,31 @@ Estos seis son muy similares. Tienen una forma muy similar a la de
 (en estos boxplots y en el de `jitter_abs`, hay valores atípicos hasta
 el valor 10 y la caja es algo más ancha que en el resto de jitters).
 
-La distribución que siguen recuerda de nuevo a una poisson con una
-lambda baja. **Preguntar por distribuciones continuas que tengan formas
-similares a esta, para así investigar.**
+Veamos las correlaciones:
+
+```{r}
+ggcorr(data = shimmer_escalado, method = c("everything", "pearson"), label = TRUE, label_round = 3)
+```
+
+Hay números muy cercanos a 1 en todos, el más diferente es
+`shimmer_apq10`.
+
+De nuevo, hay otro 1 **por hacer**.
+
+Como último experimento, voy a juntar tanto `jitter*` como `shimmer*`
+por investigar:
+
+```{r}
+ambos_escalados <- scale(train[ ,7:17])
+ggcorr(data = ambos_escalados, method = c("everything", "pearson"), label = TRUE, label_round = 1)
+```
+
+A pesar de que las distribuciones de `jitter_abs` y `shimmer*` se
+parezcan, no existe ninguna correlación fuerte entre ellas. Más bien, se
+puede ver que tiene la correlación más baja de todos los `jitter*` con
+los `shimmer*`. Evidentemente, no tiene que existir una correlación por
+mucho que se parezcan las distribuciones, pero si existiese entonces
+podríamos hablar de información interesante.
 
 ### nhr
 
@@ -472,11 +516,10 @@ nuestro modelo esté sesgado después si los síntomas o mediciones son
 distintos entre hombres y mujeres, al ser el ratio distinto entre train
 y las otras particiones/el dataset completo.
 
-Según este paper,
-<!--# https://pmc.ncbi.nlm.nih.gov/articles/PMC11885646/ --> el riesgo
-de Parkinson es 1.5 veces mayor en hombres, haciendo así que nuestro
-subdataset `train` represente algo mejor la población general que todo
-el dataset.
+Según [este paper](https://pmc.ncbi.nlm.nih.gov/articles/PMC11885646/),
+el riesgo de Parkinson es 1.5 veces mayor en hombres, haciendo así que
+nuestro subdataset `train` represente algo mejor la población general
+que todo el dataset.
 
 ------------------------------------------------------------------------
 
@@ -488,9 +531,14 @@ aaaaa
 
 ## PCA o Selección de Variables
 
-aaaaa
+"super correladas has de quitarte, no hacer pca ya que preferirías
+mantener explicabilidad EXCEPTO si quiero predecir a fuego" "mantenerse
+consistente con el objetivo"
 
 ------------------------------------------------------------------------
+
+"en regresion solo logistica porque poisson no tiene sentido, no tenemos
+datos de conteo"
 
 ### Cosas por hacer
 
