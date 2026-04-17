@@ -49,6 +49,7 @@ library(stats)
 library(gridExtra)
 library(reshape2)
 library(GGally)
+library(summarytools)
 ```
 
 ## Lectura y Descripción de Datos
@@ -307,12 +308,24 @@ hist19 <- ggplot(data = train, mapping = aes(x = .data[["ppe"]])) + #datos
 grid.arrange(hist1, hist2, hist3, hist4, hist5, hist6, hist7, hist8, hist9, hist10, hist11, hist12, hist13, hist14, hist15, hist16, hist17, hist18, hist19, nrow=10)
 ```
 
+```{r}
+# tabla de valores interesantes de descr
+# nos entrega información de todas las variables excepto las tres que se quitan
+# transpose y headings son tocados para hacer que los datos aparezcan más limpios, stats son los datos que más importa mostrar ahora
+train_descr <- train |> select(-"subject",-"age", -"sex")
+descr(train_descr, stats = c("mean", "sd", "skewness", "kurtosis", "max", "min"), transpose = TRUE, headings= FALSE)
+```
+
 Así de primeras, se pueden ver claramente dos grandes grupos de
 variables: los jitter\* y los shimmer\*. Cada uno de los integrantes del
 grupo es muy similar al resto, a excepción de jitter_abs. Vamos a actuar
 como si los grupos fuesen una sola variable, y si algo raro es visible
 en alguna de las variables se mencionará ahí. Se explorará como si fuese
 un grupo también las dos variables de UPDRS.
+
+En la tabla de valores interesantes, se puede ver que algunos valores de
+skewness y kurtosis coinciden, lo cual es señal de posibles variables
+duplicadas. Veremos si esto es cierto.
 
 ### test_time
 
@@ -341,7 +354,10 @@ que algunos pacientes devolvieron temporalmente el medidor a petición
 del médico, para guardar los datos ya medidos, por ejemplo. También
 podemos ver con esto que no todos los días se toman mediciones. En el
 caso de lo que se muestra con el head(), podemos ver que se hace una
-medición una vez a la semana.
+medición una vez a la semana. Sin embargo, como se puede ver en el tramo
+de limpieza de datos, todos los sujetos dan más de 100 mediciones a lo
+largo de los más o menos 200 días del experimento, así que el ritmo real
+es más de una vez cada dos días.
 
 Otro dato interesante, visto con el head() es que los días no son
 medidos con enteros, son valores contínuos. En la página web no indica
@@ -357,7 +373,11 @@ el pequeño hueco que hay en la mitad de la distribución.
 
 Algo a tener en cuenta cuando exploremos estas variables es que el
 dataset es de 2009, es muy probable que haya cambiado bastante el test
-UPDRS.
+UPDRS. Sin embargo, la idea del test es la misma: saber cuánto afecta al
+paciente la enfermedad de Parkinson. Ya que nuestras variables solamente
+hablan acerca de efectos físicos de la enfermedad, una vez vayamos a
+decidir cuál de las dos variables vamos a predecir escogeremos
+`motor_UPDRS`.
 
 Las distribuciones de los dos valores son raras, y no son parecidas
 entre sí. Sin embargo, han de tener relación, aunque no sepamos cuanta
@@ -372,12 +392,14 @@ updrs_diff <- train$total_UPDRS - train$motor_UPDRS
 ud_df <- data.frame(updrs_diff)
 ggplot(data = ud_df, mapping = aes(x = .data[["updrs_diff"]])) + 
   geom_histogram() +
+  labs(title = "total_UPDRS - motor_UPDRS") +
   theme_minimal() 
 summary(updrs_diff)
 updrs_ratio <- train$motor_UPDRS / train$total_UPDRS
 ur_df <- data.frame(updrs_ratio)
 ggplot(data = ur_df, mapping = aes(x = .data[["updrs_ratio"]])) +
   geom_histogram() +
+  labs(title = "total_UPDRS / motor_UPDRS") +
   theme_minimal() 
 summary(updrs_ratio)
 ```
@@ -396,14 +418,17 @@ sujetos). Los dos sujetos que llegan a tener un valor más alto que él
 son 37 y 39, los cuales poseen una `updrs_diff` cercana a 10 durante el
 tiempo en el cual tienen el `motor_UPDRS` más alto.
 
-Veamos la correlación entre ambos valores, quitando en el segundo caso
-al atípico 25 para ver si es tan influyente:
+Veamos la correlación entre ambos valores:
 
 ```{r}
 updrs <- scale(train[ ,5:6]) # son la quinta y sexta columna
 cor(x = updrs)
-#por hacer
 ```
+
+Después de todas estas comprobaciones, podemos confirmar que escogeremos
+`motor_UPDRS` como variable a predecir, ya que `total_UPDRS` es menos
+predecible gracias a la posibilidad de que existan más sujetos como el
+25.
 
 ### jitter\*
 
@@ -422,17 +447,37 @@ a la cola superior del boxplot, caja de más o menos el mismo tamaño). La
 caja de `jitter_abs` es algo más ancha y tiene los valores "atípicos"
 bastante más cerca del 0.
 
+Veamos si son log-normales:
+
+```{r message=FALSE}
+logjitter_pct <- log(train$jitter_pct)
+ggplot(mapping = aes(logjitter_pct)) + geom_histogram() + labs(title = "Logaritmo de jitter_pct (no parece normal)")
+# no se parece, así que no voy a hacer más tests
+logjitter_abs <- log(train$jitter_abs)
+ggplot(mapping = aes(logjitter_abs)) + geom_histogram() + labs(title = "Logaritmo de jitter_abs (podría ser normal)")
+# voy a hacer un test más
+descr(logjitter_abs, stats = c("skewness", "kurtosis"), transpose = TRUE, headings= FALSE)
+```
+
+En el caso de `jitter_pct` vemos que no lo es (mucho peso a la
+izquierda), sin embargo `jitter_abs` tiene una forma mucho más cercana a
+la normal. Usando skewness y kurtosis (que en este paquete han de ser 0
+para denotar normalidad) puedo ver que está cerca de ser normal. Sin
+embargo, al ser el n tan grande (4170 observaciones), genera un poco de
+duda ya que no está más cerca del 0.
+
 Veamos las correlaciones:
 
 ```{r}
-ggcorr(data = jitter_escalado, method = c("everything", "pearson"), label = TRUE, label_round = 3) # pearson es el supuesto default, ahora miro si hay alguno mejor
+ggcorr(data = jitter_escalado, method = c("everything", "pearson"), label = TRUE, label_round = 3) # pearson es el default, label y label_round se usan para hacer que aparezcan los valores de la correlación con (en este caso) 3 decimales.
 ```
 
 Se ve una correlación muy alta en todos excepto en los que se involucra
 `jitter_abs`. Otra vez, el valor más diferente es este.
 
-Se ve un 1 entre `rap` y `ddp`, una de las dos ha de ser borrada
-después.
+Se ve un 1 entre `jitter_rap` y `jitter_ddp`, una de las dos ha de ser
+borrada después. Puede que tengamos que borrar más, al estar alguna
+correlación más muy cerca del 1.
 
 ### shimmer\*
 
@@ -450,23 +495,41 @@ Estos seis son muy similares. Tienen una forma muy similar a la de
 (en estos boxplots y en el de `jitter_abs`, hay valores atípicos hasta
 el valor 10 y la caja es algo más ancha que en el resto de jitters).
 
+Veamos también aquí si son log-normales:
+
+```{r}
+logshimmer <- log(train$shimmer)
+ggplot(mapping = aes(logshimmer)) + geom_histogram() + labs(title = "Logaritmo de shimmer (cola derecha demasiado fuerte)")
+# voy a hacer un test más
+descr(logshimmer, stats = c("skewness", "kurtosis"), transpose = TRUE, headings= FALSE)
+```
+
+En este caso, es más claro que `shimmer` no es log-normal, al tener una
+cola derecha con tantas observaciones. El test lo indica: skewness=0.64
+indica que hay mucha cola derecha y kurtosis=1.08 indica que la
+distribución es más puntiaguda que una normal.
+
 Veamos las correlaciones:
 
 ```{r}
-ggcorr(data = shimmer_escalado, method = c("everything", "pearson"), label = TRUE, label_round = 3)
+ggcorr(data = shimmer_escalado, method = c("everything", "pearson"), label = TRUE, label_round = 3, hjust = 0.7, size = 4, layout.exp = 2)
+# hjust, size y layout.exp son usados para que los nombres de las variables se vean bien, vuelven a usarse abajo
 ```
 
 Hay números muy cercanos a 1 en todos, el más diferente es
-`shimmer_apq10`.
+`shimmer_apq11`.
 
-De nuevo, hay otro 1 **por hacer**.
+De nuevo, hay otro 1, entre `shimmer_apq3` y `shimmer_dda`. Es seguro
+que uno de los dos será eliminado después, pero no serán los únicos que
+podrían ser eliminados gracias a que la correlación entre todos es
+altísima.
 
-Como último experimento, voy a juntar tanto `jitter*` como `shimmer*`
+Como último experimento, vamos a juntar tanto `jitter*` como `shimmer*`
 por investigar:
 
 ```{r}
 ambos_escalados <- scale(train[ ,7:17])
-ggcorr(data = ambos_escalados, method = c("everything", "pearson"), label = TRUE, label_round = 1)
+ggcorr(data = ambos_escalados, method = c("everything", "pearson"), label = TRUE, label_round = 2, hjust = 0.85, size = 4, layout.exp = 3)
 ```
 
 A pesar de que las distribuciones de `jitter_abs` y `shimmer*` se
@@ -478,7 +541,12 @@ podríamos hablar de información interesante.
 
 ### nhr
 
+...
+
 ### hnr
+
+La distribución de esta variable tiene la forma de una normal con una
+gran cola izquierda.
 
 ### rpde
 
@@ -521,6 +589,14 @@ el riesgo de Parkinson es 1.5 veces mayor en hombres, haciendo así que
 nuestro subdataset `train` represente algo mejor la población general
 que todo el dataset.
 
+### Conclusiones del EDA
+
+-   bla
+
+-   bla
+
+-   bla
+
 ------------------------------------------------------------------------
 
 ## Aplicación del Modelo de Regresión
@@ -537,20 +613,32 @@ consistente con el objetivo"
 
 ------------------------------------------------------------------------
 
+## Modelos no lineales y transformación de variables
+
+aaaaa
+
+------------------------------------------------------------------------
+
+## Modelos de regresión generalizada
+
 "en regresion solo logistica porque poisson no tiene sentido, no tenemos
 datos de conteo"
 
+------------------------------------------------------------------------
+
+## Comparación y evaluación de modelos
+
+aaaaa
+
+------------------------------------------------------------------------
+
+## Conclusiones y trabajo a futuro
+
+aaaaa
+
+------------------------------------------------------------------------
+
 ### Cosas por hacer
-
-Se ha de hacer la partición antes de limpiar los datos, si hago alguna
-transformación en train he de hacerla después en las otras particiones.
-
-Hay que hacer los histogramas.
-
-No hacer una regresión en la cual tengamos dos variables objetivo,
-escoger entre una de las dos.
-
-PCA? O usar descarte de variables? Pensar luego.
 
 "La gracia es ir probando cosas, no hacer el mejor modelo".
 
@@ -560,3 +648,8 @@ Antes de hacer las cosas con las otras particiones hemos de limpiarlas
 con las mismas transformaciones que hicimos en train.
 
 Faltan bastantes cosas del EDA.
+
+Es posible que las cosas no se hagan en el orden de los apartados que
+están puestos ahora mismo, habrá que cambiarlos si es necesario
+(preguntaré en clase en cuanto pueda cuál es el orden real que
+deberíamos de seguir).
