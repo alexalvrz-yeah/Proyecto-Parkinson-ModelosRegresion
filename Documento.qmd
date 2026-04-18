@@ -80,10 +80,10 @@ En esta tabla, se explicarán cada una de las variables.
 | `total_UPDRS` | Puntuación UPDRS total medida por un médico clínico. | Interpolada linealmente. |
 | `Jitter*` | Medidas acerca de la variación de la frecuencia fundamental de la voz. | Son Jitter(%), Jitter(Abs), Jitter:RAP, Jitter:PPQ5 y Jitter:DDP. En castellano, jitter significa vibrar, temblar. |
 | `Shimmer*` | Medidas acerca de la variación en amplitud de la voz. | Son Shimmer, Shimmer(dB), Shimmer:APQ3, Shimmer:APQ5, Shimmer:APQ11 y Shimmer:DDA. En castellano, shimmer significa titilar. |
-| `NHR` y `HNR` | Medidas del ratio del sonido a componentes tonales de la voz. |  |
-| `RPDE` | Medida no linear dinámica de la complejidad. | Siglas que significan "Rapidly Progressive Dementia Evaluation". Al fin y al cabo, el parkinson está relacionado con la pérdida de memoria. |
+| `NHR` y `HNR` | Medidas del ratio del sonido a componentes tonales de la voz. | "Noise-to-harmonics" ratio y "harmonics-to-noise" ratio. |
+| `RPDE` | Medida no linear dinámica de la complejidad. | Siglas que significan "Recurrence Period Density Entropy". |
 | `DFA` | Exponente de escalado de señal fractal. | "Detrended Fluctuation Analysis", medida relacionada a señales. |
-| `PPE` | Medida no lineal de la variación fundamental de la frecuencia. |  |
+| `PPE` | Medida no lineal de la variación fundamental de la frecuencia. | "Pitch Period Entropy". |
 
 UPDRS son las siglas de "Unified Parkinson's Disease Rating Scale". Ya
 que este test no se hace todos los días al paciente, existen algunas
@@ -317,11 +317,13 @@ descr(train_descr, stats = c("mean", "sd", "skewness", "kurtosis", "max", "min")
 ```
 
 Así de primeras, se pueden ver claramente dos grandes grupos de
-variables: los jitter\* y los shimmer\*. Cada uno de los integrantes del
-grupo es muy similar al resto, a excepción de jitter_abs. Vamos a actuar
-como si los grupos fuesen una sola variable, y si algo raro es visible
-en alguna de las variables se mencionará ahí. Se explorará como si fuese
-un grupo también las dos variables de UPDRS.
+variables: los `jitter*` y los `shimmer*`. Cada uno de los integrantes
+del grupo es muy similar al resto, a excepción de `jitter_abs`. Vamos a
+actuar como si los grupos fuesen una sola variable, y si algo raro es
+visible en alguna de las variables se mencionará ahí. Se explorará como
+si fuese un grupo también las dos variables de `*_UPDRS`. Ya `nhr` y
+`hnr` aparecen juntas en la tabla de descripción de variables, también
+las juntaré aquí.
 
 En la tabla de valores interesantes, se puede ver que algunos valores de
 skewness y kurtosis coinciden, lo cual es señal de posibles variables
@@ -422,7 +424,7 @@ Veamos la correlación entre ambos valores:
 
 ```{r}
 updrs <- scale(train[ ,5:6]) # son la quinta y sexta columna
-cor(x = updrs)
+cor(x = updrs)[2] #que muestre solamente el valor importante
 ```
 
 Después de todas estas comprobaciones, podemos confirmar que escogeremos
@@ -455,16 +457,17 @@ ggplot(mapping = aes(logjitter_pct)) + geom_histogram() + labs(title = "Logaritm
 # no se parece, así que no voy a hacer más tests
 logjitter_abs <- log(train$jitter_abs)
 ggplot(mapping = aes(logjitter_abs)) + geom_histogram() + labs(title = "Logaritmo de jitter_abs (podría ser normal)")
-# voy a hacer un test más
+# voy a hacer unos tests
 descr(logjitter_abs, stats = c("skewness", "kurtosis"), transpose = TRUE, headings= FALSE)
+shapiro.test(logjitter_abs)
 ```
 
 En el caso de `jitter_pct` vemos que no lo es (mucho peso a la
 izquierda), sin embargo `jitter_abs` tiene una forma mucho más cercana a
 la normal. Usando skewness y kurtosis (que en este paquete han de ser 0
-para denotar normalidad) puedo ver que está cerca de ser normal. Sin
-embargo, al ser el n tan grande (4170 observaciones), genera un poco de
-duda ya que no está más cerca del 0.
+para denotar normalidad) se puede ver que está cerca de ser normal. Sin
+embargo, el test de Shapiro-Wilk indica que la distribución no es
+normal, al ser el p-valor menor a 0.05.
 
 Veamos las correlaciones:
 
@@ -497,7 +500,7 @@ el valor 10 y la caja es algo más ancha que en el resto de jitters).
 
 Veamos también aquí si son log-normales:
 
-```{r}
+```{r message=FALSE}
 logshimmer <- log(train$shimmer)
 ggplot(mapping = aes(logshimmer)) + geom_histogram() + labs(title = "Logaritmo de shimmer (cola derecha demasiado fuerte)")
 # voy a hacer un test más
@@ -524,8 +527,7 @@ que uno de los dos será eliminado después, pero no serán los únicos que
 podrían ser eliminados gracias a que la correlación entre todos es
 altísima.
 
-Como último experimento, vamos a juntar tanto `jitter*` como `shimmer*`
-por investigar:
+Vamos a juntar tanto `jitter*` como `shimmer*` por investigar:
 
 ```{r}
 ambos_escalados <- scale(train[ ,7:17])
@@ -539,18 +541,30 @@ los `shimmer*`. Evidentemente, no tiene que existir una correlación por
 mucho que se parezcan las distribuciones, pero si existiese entonces
 podríamos hablar de información interesante.
 
-### nhr
+Y por último, usemos Kolmogorov-Smirnov para ver si la distribución
+entre el jitter anómalo y un shimmer es igual:
 
-...
+```{r}
+ks.test(ambos_escalados[ ,2], ambos_escalados[ ,6], exact = TRUE) #test entre jitter_abs y shimmer, el exact es para evitar que haya un warning
+```
 
-### hnr
+Al ser el p-valor menor que 0.05, podemos confirmar que no existe ni una
+correlación especial (con lo de arriba) ni siguen la misma distribución
+`jitter_abs` y `shimmer`.
 
-La distribución de esta variable tiene la forma de una normal con una
-gran cola izquierda.
+### nhr y hnr
+
+La distribución de la segunda variable tiene la forma de una normal con
+una gran cola izquierda, y la de la primera sigue una distribución que a
+primera vista se parece a las de `shimmer` pero con menos outliers.
 
 ### rpde
 
 ### dfa
+
+Esta distribución es bastante interesante: se muestran dos
+acumulaciones/montañas en vez de una como en el resto de las
+distribuciones de este tipo
 
 ### ppe
 
@@ -642,7 +656,7 @@ aaaaa
 
 "La gracia es ir probando cosas, no hacer el mejor modelo".
 
-<https://ieeexplore.ieee.org/document/5339170> paper original
+<https://www.nature.com/articles/npre.2009.3920.1> paper original
 
 Antes de hacer las cosas con las otras particiones hemos de limpiarlas
 con las mismas transformaciones que hicimos en train.
