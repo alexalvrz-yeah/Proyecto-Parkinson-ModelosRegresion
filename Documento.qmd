@@ -50,6 +50,7 @@ library(gridExtra)
 library(reshape2)
 library(GGally)
 library(summarytools)
+library(ggbeeswarm)
 ```
 
 ## Lectura y Descripción de Datos
@@ -558,6 +559,16 @@ La distribución de la segunda variable tiene la forma de una normal con
 una gran cola izquierda, y la de la primera sigue una distribución que a
 primera vista se parece a las de `shimmer` pero con menos outliers.
 
+Veamos la correlación entre las dos:
+
+```{r}
+cor(scale(train[ ,18:19]))[2]
+```
+
+A pesar de que estén muy relacionadas por nombre (noise-to-harmonics y
+harmonics-to-noise), la correlación inversa no es tan fuerte como la de
+las variables de arriba.
+
 ### rpde
 
 ### dfa
@@ -570,12 +581,24 @@ distribuciones de este tipo
 
 ### age
 
-Vamos a representar las edades:
+Vamos a representar las edades. Primero, tendremos que obtenerlas:
 
 ```{r}
-# por hacer, no se como hacerlo
-# tener en cuenta que hay sujetos que tienen la misma edad y que no todos los sujetos tienen la misma cantidad de muestras
+edades <- (train %>% count(subject, age))[2]
+df_edades <- data.frame(edades)
 ```
+
+Son pocos sujetos, por lo tanto una pirámide poblacional no quedará
+bien. Vamos a probar a hacer un gráfico de abeja:
+
+```{r}
+# gráfico de abeja
+ggplot(df_edades, aes(y=age, x='')) +
+  geom_beeswarm()
+```
+
+Podemos ver dos grandes atípicos: alguien mayor de 80 años y alguien
+menor de 40. Las demás observaciones están entre \~75 y \~50.
 
 ### sex
 
