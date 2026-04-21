@@ -51,6 +51,7 @@ library(reshape2)
 library(GGally)
 library(summarytools)
 library(ggbeeswarm)
+library(nortest)
 ```
 
 ## Lectura y Descripción de Datos
@@ -161,13 +162,17 @@ train <- na.omit(train_na)
 head(sort(train$test_time)) # ya no hay valores negativos, solo ceros
 ```
 
+A pesar de que a priori esto no debería de causar problemas, parece que
+en algunos puntos del dataset la variable `test_time` no va en orden
+mayor a menor. Eso sí, `subject` sí es consistente.
+
 ------------------------------------------------------------------------
 
 ## Exploración de Datos
 
 Para explorar todo al mismo tiempo, usaremos muchos histogramas al mismo
-tiempo. No haré histogramas del sexo, la ID y la edad porque no es
-lógico hacerlo. Eso sí, exploraré el sexo y la ID.
+tiempo. No haremos histogramas del sexo, la ID y la edad porque no es
+lógico hacerlo. Eso sí, se explorarán el sexo y la edad más tarde.
 
 ```{r message=FALSE, fig.height=30, fig.width=8}
 
@@ -309,12 +314,15 @@ hist19 <- ggplot(data = train, mapping = aes(x = .data[["ppe"]])) + #datos
 grid.arrange(hist1, hist2, hist3, hist4, hist5, hist6, hist7, hist8, hist9, hist10, hist11, hist12, hist13, hist14, hist15, hist16, hist17, hist18, hist19, nrow=10)
 ```
 
+Además de los histogramas, con la siguiente tabla se puede ver más
+información importante:
+
 ```{r}
 # tabla de valores interesantes de descr
 # nos entrega información de todas las variables excepto las tres que se quitan
 # transpose y headings son tocados para hacer que los datos aparezcan más limpios, stats son los datos que más importa mostrar ahora
 train_descr <- train |> select(-"subject",-"age", -"sex")
-descr(train_descr, stats = c("mean", "sd", "skewness", "kurtosis", "max", "min"), transpose = TRUE, headings= FALSE)
+descr(train_descr, stats = c("mean", "sd", "skewness", "kurtosis", "min", "max"), transpose = TRUE, headings= FALSE)
 ```
 
 Así de primeras, se pueden ver claramente dos grandes grupos de
@@ -328,14 +336,15 @@ las juntaré aquí.
 
 En la tabla de valores interesantes, se puede ver que algunos valores de
 skewness y kurtosis coinciden, lo cual es señal de posibles variables
-duplicadas. Veremos si esto es cierto.
+duplicadas. Veremos si esto es cierto. Viendo los valores de skewness y
+kurtosis, descubrimos que `rpde` tal vez sea normal.
 
 ### test_time
 
 Parece una uniforme que se extiende desde el 0 hasta casi 200, a veces
 extendiéndose un poco más. Teniendo en cuenta que esta variable indica
 el día desde el comienzo del monitoreo del paciente, tiene sentido que
-sea uniforme al comienzo y que luego tenga algo de cola: todos los
+sea uniforme hasta el final, donde muestra algo de cola: todos los
 pacientes tienen un día 0 pero no todos terminan al mismo tiempo las
 pruebas. Destaca un "hueco" en la mitad (algo antes del 100) del
 histograma, que habrá que investigar. Pruebo un valor distinto de
@@ -369,8 +378,8 @@ son los días desde que comenzaron las pruebas.
 
 En conclusión, era de esperar que no fuese una variable uniforme exacta
 gracias a que no todos los pacientes entregaron la misma cantidad de
-datos ni se hicieron las pruebas los mismos días, pero aún así destaca
-el pequeño hueco que hay en la mitad de la distribución.
+datos ni se hicieron las pruebas los mismos días, y destaca el pequeño
+hueco que hay en la mitad de la distribución.
 
 ### motor_UPDRS y total_UPDRS
 
@@ -383,7 +392,7 @@ decidir cuál de las dos variables vamos a predecir escogeremos
 `motor_UPDRS`.
 
 Las distribuciones de los dos valores son raras, y no son parecidas
-entre sí. Sin embargo, han de tener relación, aunque no sepamos cuanta
+entre sí. Sin embargo, han de tener relación, aunque no sepamos cuánta
 aún. Hagamos un par de operaciones para ver cómo de relacionadas están.
 
 Restemos y también dividamos el uno al otro para así ver si son
@@ -419,19 +428,21 @@ Ese paciente es el `subject` 25, el cual tiene el tercer `motor_UPDRS`
 más alto de toda la partición (en cierto momento, y comparado con otros
 sujetos). Los dos sujetos que llegan a tener un valor más alto que él
 son 37 y 39, los cuales poseen una `updrs_diff` cercana a 10 durante el
-tiempo en el cual tienen el `motor_UPDRS` más alto.
+tiempo en el cual tienen el `motor_UPDRS` más alto. A pesar de que su
+`motor_UPDRS` es más bajo en algunos momentos, la diferencia suele
+rondar los 20 puntos.
 
-Veamos la correlación entre ambos valores:
+Usando este sujeto como ejemplo, podemos confirmar que escogeremos
+`motor_UPDRS` como variable a predecir, ya que `total_UPDRS` es menos
+predecible gracias a la posibilidad de que existan más sujetos como él.
+
+Veamos la correlación entre ambos valores, simplemente para ver cómo de
+elevada es:
 
 ```{r}
 updrs <- scale(train[ ,5:6]) # son la quinta y sexta columna
 cor(x = updrs)[2] #que muestre solamente el valor importante
 ```
-
-Después de todas estas comprobaciones, podemos confirmar que escogeremos
-`motor_UPDRS` como variable a predecir, ya que `total_UPDRS` es menos
-predecible gracias a la posibilidad de que existan más sujetos como el
-25.
 
 ### jitter\*
 
@@ -461,14 +472,15 @@ ggplot(mapping = aes(logjitter_abs)) + geom_histogram() + labs(title = "Logaritm
 # voy a hacer unos tests
 descr(logjitter_abs, stats = c("skewness", "kurtosis"), transpose = TRUE, headings= FALSE)
 shapiro.test(logjitter_abs)
+lillie.test(logjitter_abs)
 ```
 
 En el caso de `jitter_pct` vemos que no lo es (mucho peso a la
 izquierda), sin embargo `jitter_abs` tiene una forma mucho más cercana a
 la normal. Usando skewness y kurtosis (que en este paquete han de ser 0
 para denotar normalidad) se puede ver que está cerca de ser normal. Sin
-embargo, el test de Shapiro-Wilk indica que la distribución no es
-normal, al ser el p-valor menor a 0.05.
+embargo, los tests indican que la distribución no es normal, al ser el
+p-valor menor a 0.05.
 
 Veamos las correlaciones:
 
@@ -503,7 +515,7 @@ Veamos también aquí si son log-normales:
 
 ```{r message=FALSE}
 logshimmer <- log(train$shimmer)
-ggplot(mapping = aes(logshimmer)) + geom_histogram() + labs(title = "Logaritmo de shimmer (cola derecha demasiado fuerte)")
+ggplot(mapping = aes(logshimmer)) + geom_histogram() + labs(title = "Logaritmo de shimmer (cola derecha demasiado fuerte, campana muy puntiaguda)")
 # voy a hacer un test más
 descr(logshimmer, stats = c("skewness", "kurtosis"), transpose = TRUE, headings= FALSE)
 ```
@@ -521,7 +533,7 @@ ggcorr(data = shimmer_escalado, method = c("everything", "pearson"), label = TRU
 ```
 
 Hay números muy cercanos a 1 en todos, el más diferente es
-`shimmer_apq11`.
+`shimmer_apq11`. No es muy extraño, eso sí.
 
 De nuevo, hay otro 1, entre `shimmer_apq3` y `shimmer_dda`. Es seguro
 que uno de los dos será eliminado después, pero no serán los únicos que
@@ -555,8 +567,8 @@ correlación especial (con lo de arriba) ni siguen la misma distribución
 
 ### nhr y hnr
 
-La distribución de la segunda variable tiene la forma de una normal con
-una gran cola izquierda, y la de la primera sigue una distribución que a
+La distribución de la segunda variable tiene forma de campana con una
+gran cola izquierda, y la de la primera sigue una distribución que a
 primera vista se parece a las de `shimmer` pero con menos outliers.
 
 Veamos la correlación entre las dos:
@@ -567,17 +579,60 @@ cor(scale(train[ ,18:19]))[2]
 
 A pesar de que estén muy relacionadas por nombre (noise-to-harmonics y
 harmonics-to-noise), la correlación inversa no es tan fuerte como la de
-las variables de arriba.
+las variables de arriba. Son también distintas en los valores: `nhr`
+está entre 0 y 0.75 y `hnr` está entre \~1 y \~35.
 
 ### rpde
+
+Al ojo, esta variable tiene una forma extraña, en la cual la frecuencia
+va subiendo "en escalones" por la izquierda hasta el pico, donde cae
+rápidamente y termina formando una cola derecha con muy pocas
+observaciones.
+
+Vimos arriba que esta variable (según la skewness y la kurtosis) podía
+ser normal, así que vamos a hacer un test para comprobarlo:
+
+```{r}
+# escogemos usar lillie test ya que shapiro wilk empeora cuando hay muchas observaciones
+lillie.test(train$rpde)
+```
+
+No lo es, ni de cerca. Por mucho que los valores sean bastante cercanos
+a 0, no es normal debido a que la forma es bastante extraña.
+
+**PREGUNTAR ACERCA DE ESTO!!!**
 
 ### dfa
 
 Esta distribución es bastante interesante: se muestran dos
 acumulaciones/montañas en vez de una como en el resto de las
-distribuciones de este tipo
+distribuciones de este tipo. Veámosla con más bins:
+
+```{r}
+ggplot(data = train, mapping = aes(x = .data[["dfa"]])) + #datos
+  geom_histogram(bins = 50) + #histograma con bins cambiados
+  geom_vline(xintercept = media_dfa, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
+  labs(title = "Distribución de dfa", x = "Cantidad", y = "Frecuencia" ) + #leyenda
+  theme_minimal() #tema
+```
+
+No llega a haber completamente una segunda montaña. Al igual que la
+variable anterior y en la siguiente, tiene una cola con muy pocas
+observaciones en la derecha.
 
 ### ppe
+
+Esta podría ser log-normal.
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data = train, mapping = aes(x = log(.data[["ppe"]]))) + 
+  geom_histogram()
+lillie.test(log(train$ppe)) #test que funciona mejor que el ks.test
+descr(log(train$ppe), stats = c("skewness", "kurtosis"), transpose = TRUE, headings= FALSE)
+```
+
+Según el test, no lo es. Esto es debido a la cola izquierda y la forma
+demasiado empinada (kurtosis positiva).
 
 ### age
 
@@ -607,7 +662,8 @@ Conocer esto es "hacer trampa" ya que no deberíamos de saberlo (no
 deberíamos de saber nada acerca de test y validation), pero bueno.
 
 ```{r}
-# teniendo en cuenta lo de arriba, fabricando un dataset nuevo para evitar hacer código raro
+# fabricando un dataset nuevo para que me resulte más cómodo
+# los números vienen de la tabla count de la sección de limpieza de datos
 df <- data.frame(
   sexo = c("0", "1"), 
   y = c(19, 11)
@@ -624,15 +680,21 @@ y las otras particiones/el dataset completo.
 Según [este paper](https://pmc.ncbi.nlm.nih.gov/articles/PMC11885646/),
 el riesgo de Parkinson es 1.5 veces mayor en hombres, haciendo así que
 nuestro subdataset `train` represente algo mejor la población general
-que todo el dataset.
+que todo el dataset. Esto puede causar sesgo.
 
 ### Conclusiones del EDA
 
--   bla
-
--   bla
-
--   bla
+-   `test_time` es más o menos uniforme, excepto por la mitad y el
+    final.
+-   Vamos a predecir `motor_UPDRS` ya que `total_UPDRS` es bastante
+    menos predecible con lo que tenemos.
+-   `jitter*` y `shimmer*` forman dos grupos con correlación alta y
+    distribuciones similares, en ambos hay una variable que es
+    redundante y `jitter_abs` es un "perro verde".
+-   **PREGUNTAR POR LAS VARIABLES RARAS.**
+-   Hay varias edades repetidas y solo existen dos atípicos (36 y 85).
+-   El ratio de sexo de nuestros pacientes es distinto al de la
+    población general (más hombres, puede que cause sesgo).
 
 ------------------------------------------------------------------------
 
