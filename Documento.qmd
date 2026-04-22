@@ -698,23 +698,33 @@ que todo el dataset. Esto puede causar sesgo.
 
 ------------------------------------------------------------------------
 
-## Aplicación del Modelo de Regresión
-
-aaaaa
-
-------------------------------------------------------------------------
-
 ## PCA o Selección de Variables
 
 "super correladas has de quitarte, no hacer pca ya que preferirías
 mantener explicabilidad EXCEPTO si quiero predecir a fuego" "mantenerse
 consistente con el objetivo"
 
+Se tienen que quitar, con completa seguridad, `jitter_ddp` y
+`shimmer_dda`, al tener exactamente 1 de correlación con una variable
+previa.
+
+------------------------------------------------------------------------
+
+## Aplicación del Modelo de Regresión
+
+preguntar exactamente cómo hacerlo, puesto que es poco específico.
+variable a variable con la objetivo? con la que de mejor resultado?
+hacer una PCA y hacerlo con x=PC1??
+
+(indica que se han de hacer análisis de residuo y transformación de
+variables si es necesario).
+
 ------------------------------------------------------------------------
 
 ## Modelos no lineales y transformación de variables
 
-aaaaa
+"seleccionar el mejor modelo de regresión lineal múltiple y realizar su
+diagnóstico"
 
 ------------------------------------------------------------------------
 
@@ -722,6 +732,9 @@ aaaaa
 
 "en regresion solo logistica porque poisson no tiene sentido, no tenemos
 datos de conteo"
+
+binarizar target para aplicar regresión logística, habrá que ver con
+cuál criterio.
 
 ------------------------------------------------------------------------
 
