@@ -52,6 +52,7 @@ library(GGally)
 library(summarytools)
 library(ggbeeswarm)
 library(nortest)
+library(infotheo)
 ```
 
 ## Lectura y Descripción de Datos
@@ -691,9 +692,13 @@ sirve para poder predecirlo.
 
 ```{r}
 # esto se hará creando un dataframe e imprimiéndolo
-# pearson, spearman
+# pearson, spearman, info mutua
 # para estandarizar usar escalado robusto
 # transformación inversa?? no hay ningún 0
+cor(method = "pearson")
+cor(method = "spearman")
+mutinformation("los dos valores que quiero mirar")
+# hay que hacer un for para hacerlos uno a uno
 ```
 
 ### Conclusiones del EDA
