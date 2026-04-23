@@ -682,18 +682,33 @@ el riesgo de Parkinson es 1.5 veces mayor en hombres, haciendo así que
 nuestro subdataset `train` represente algo mejor la población general
 que todo el dataset. Esto puede causar sesgo.
 
+### tablilla de escoger una variable para hacer regresión simple
+
+En esta sección se creará una tabla en la cual se mostrarán datos acerca
+de la relación de las variables con `motor_UPDRS`, debido a que de
+momento no hemos preguntado cuál de las variables es la que más nos
+sirve para poder predecirlo.
+
+```{r}
+# esto se hará creando un dataframe e imprimiéndolo
+# pearson, spearman
+# para estandarizar usar escalado robusto
+# transformación inversa?? no hay ningún 0
+```
+
 ### Conclusiones del EDA
 
-- `test_time` es más o menos uniforme, excepto por la mitad y el final.
-- Vamos a predecir `motor_UPDRS` ya que `total_UPDRS` es bastante menos
-  predecible con lo que tenemos.
-- `jitter*` y `shimmer*` forman dos grupos con correlación alta y
-  distribuciones similares, en ambos hay una variable que es redundante
-  y `jitter_abs` es un "perro verde".
-- **PREGUNTAR POR LAS VARIABLES RARAS.**
-- Hay varias edades repetidas y solo existen dos atípicos (36 y 85).
-- El ratio de sexo de nuestros pacientes es distinto al de la población
-  general (más hombres, puede que cause sesgo).
+-   `test_time` es más o menos uniforme, excepto por la mitad y el
+    final.
+-   Vamos a predecir `motor_UPDRS` ya que `total_UPDRS` es bastante
+    menos predecible con lo que tenemos.
+-   `jitter*` y `shimmer*` forman dos grupos con correlación alta y
+    distribuciones similares, en ambos hay una variable que es
+    redundante y `jitter_abs` es un "perro verde".
+-   **PREGUNTAR POR LAS VARIABLES RARAS.**
+-   Hay varias edades repetidas y solo existen dos atípicos (36 y 85).
+-   El ratio de sexo de nuestros pacientes es distinto al de la
+    población general (más hombres, puede que cause sesgo).
 
 ------------------------------------------------------------------------
 
@@ -701,10 +716,16 @@ que todo el dataset. Esto puede causar sesgo.
 
 preguntar exactamente cómo hacerlo, puesto que es poco específico.
 variable a variable con la objetivo? con la que de mejor resultado?
-hacer una PCA y hacerlo con x=PC1??
 
 (indica que se han de hacer análisis de residuo y transformación de
 variables si es necesario).
+
+hay que buscar más arriba cual es la que nos hara el mejor modelo usando
+conclusiones del eda.
+
+**focalizarse en el eda en buscar cuales variables me sirven para
+conocer motor_UPDRS. usar transformación boxcox?? hacer anova luego?
+luego hacer diagnóstico, ya que es obligatorio.**
 
 ------------------------------------------------------------------------
 
@@ -730,6 +751,12 @@ durante las mediciones ("All subjects remained un-medicated for the
 six-month duration of the study"), cosa que probablemente no sucederá si
 consiguiésemos muestras nuevas.
 
+*empiezas un modelo con todas, usando info vas quitando las menos útiles
+y llegas a un modelo, luego haces un modelo con backwards/stepwise, con
+etc y luego comparar con AIC, BIC, Cp de Mallows...*
+
+te quedas con uno.
+
 ### Modelos
 
 "seleccionar el mejor modelo de regresión lineal múltiple y realizar su
@@ -737,23 +764,27 @@ diagnóstico"
 
 ------------------------------------------------------------------------
 
-## Modelos de regresión generalizada
+## Modelos de Regresión Generalizada
 
 "en regresion solo logistica porque poisson no tiene sentido, no tenemos
 datos de conteo"
 
 binarizar target para aplicar regresión logística, habrá que ver con
-cuál criterio.
+cuál criterio. el criterio es seleccionado por nosotros (no hay un
+experto) y tiene que tener sentido (una mitad y la otra, a partir de
+cuando pasa a ser mas grave, etc). con el total y así cambiamos.
+
+no parece haber un punto en el que empeoren más los pacientes.
 
 ------------------------------------------------------------------------
 
-## Comparación y evaluación de modelos
+## Comparación y Evaluación de Modelos
 
 aaaaa
 
 ------------------------------------------------------------------------
 
-## Conclusiones y trabajo a futuro
+## Conclusiones y Trabajo a Futuro
 
 aaaaa
 
@@ -767,10 +798,3 @@ aaaaa
 
 Antes de hacer las cosas con las otras particiones hemos de limpiarlas
 con las mismas transformaciones que hicimos en train.
-
-Faltan bastantes cosas del EDA.
-
-Es posible que las cosas no se hagan en el orden de los apartados que
-están puestos ahora mismo, habrá que cambiarlos si es necesario
-(preguntaré en clase en cuanto pueda cuál es el orden real que
-deberíamos de seguir).
