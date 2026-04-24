@@ -53,6 +53,7 @@ library(summarytools)
 library(ggbeeswarm)
 library(nortest)
 library(infotheo)
+library(YEAB)
 ```
 
 ## Lectura y Descripción de Datos
@@ -84,9 +85,9 @@ En esta tabla, se explicarán cada una de las variables.
 | `Jitter*` | Medidas acerca de la variación de la frecuencia fundamental de la voz. | Son Jitter(%), Jitter(Abs), Jitter:RAP, Jitter:PPQ5 y Jitter:DDP. En castellano, jitter significa vibrar, temblar. |
 | `Shimmer*` | Medidas acerca de la variación en amplitud de la voz. | Son Shimmer, Shimmer(dB), Shimmer:APQ3, Shimmer:APQ5, Shimmer:APQ11 y Shimmer:DDA. En castellano, shimmer significa titilar. |
 | `NHR` y `HNR` | Medidas del ratio del sonido a componentes tonales de la voz. | "Noise-to-harmonics" ratio y "harmonics-to-noise" ratio. |
-| `RPDE` | Medida no linear dinámica de la complejidad. | Siglas que significan "Recurrence Period Density Entropy". |
-| `DFA` | Exponente de escalado de señal fractal. | "Detrended Fluctuation Analysis", medida relacionada a señales. |
-| `PPE` | Medida no lineal de la variación fundamental de la frecuencia. | "Pitch Period Entropy". |
+| `RPDE` | Medida no linear dinámica de la complejidad. | Siglas que significan "Recurrence Period Density Entropy". "Cómo de predecible es la voz, sabiendo que con Parkinson se vuelve caótica". |
+| `DFA` | Exponente de escalado de señal fractal. | "Detrended Fluctuation Analysis", medida relacionada a señales. "Si lo visto en un instante está correlacionado con el futuro". |
+| `PPE` | Medida no lineal de la variación fundamental de la frecuencia. | "Pitch Period Entropy". "Cómo de variable es el tono de la voz". |
 
 UPDRS son las siglas de "Unified Parkinson's Disease Rating Scale". Ya
 que este test no se hace todos los días al paciente, existen algunas
@@ -683,54 +684,124 @@ el riesgo de Parkinson es 1.5 veces mayor en hombres, haciendo así que
 nuestro subdataset `train` represente algo mejor la población general
 que todo el dataset. Esto puede causar sesgo.
 
-### tablilla de escoger una variable para hacer regresión simple
+### Relación de las variables explicativas con la objetivo
 
 En esta sección se creará una tabla en la cual se mostrarán datos acerca
 de la relación de las variables con `motor_UPDRS`, debido a que de
 momento no hemos preguntado cuál de las variables es la que más nos
 sirve para poder predecirlo.
 
+No vamos a usar las siguientes variables, ya que no tendría sentido:
+`test_time`, `total_UPDRS`, `age` y `sex`.
+
+El razonamiento detrás de la exclusión de `test_time` está escrito más
+abajo, en la sección de [PCA o Selección de Variables].
+
 ```{r}
 # esto se hará creando un dataframe e imprimiéndolo
 # pearson, spearman, info mutua
 # para estandarizar usar escalado robusto
 # transformación inversa?? no hay ningún 0
-cor(method = "pearson")
-cor(method = "spearman")
-mutinformation("los dos valores que quiero mirar")
-# hay que hacer un for para hacerlos uno a uno
+# cor(method = "pearson")
+# cor(method = "spearman")
+# mutinformation("los dos valores que quiero mirar")
+
+# vector de pearson, al ser default no lo especifico
+v_pearson <- c(cor(x = train$jitter_pct, y = train$motor_UPDRS),
+             cor(x = train$jitter_abs, y = train$motor_UPDRS),
+             cor(x = train$jitter_rap, y = train$motor_UPDRS),
+             cor(x = train$jitter_ppq5, y = train$motor_UPDRS),
+             cor(x = train$jitter_ddp, y = train$motor_UPDRS),
+             cor(x = train$shimmer, y = train$motor_UPDRS),
+             cor(x = train$shimmer_db, y = train$motor_UPDRS),
+             cor(x = train$shimmer_apq3, y = train$motor_UPDRS),
+             cor(x = train$shimmer_apq5, y = train$motor_UPDRS),
+             cor(x = train$shimmer_apq11, y = train$motor_UPDRS),
+             cor(x = train$shimmer_dda, y = train$motor_UPDRS),
+             cor(x = train$nhr, y = train$motor_UPDRS),
+             cor(x = train$hnr, y = train$motor_UPDRS),
+             cor(x = train$rpde, y = train$motor_UPDRS),
+             cor(x = train$dfa, y = train$motor_UPDRS),
+             cor(x = train$ppe, y = train$motor_UPDRS)
+             )
+# vector de spearman, con , method="s"
+v_spearman <- c(cor(x = train$jitter_pct, y = train$motor_UPDRS, method="s"),
+             cor(x = train$jitter_abs, y = train$motor_UPDRS, method="s"),
+             cor(x = train$jitter_rap, y = train$motor_UPDRS, method="s"),
+             cor(x = train$jitter_ppq5, y = train$motor_UPDRS, method="s"),
+             cor(x = train$jitter_ddp, y = train$motor_UPDRS, method="s"),
+             cor(x = train$shimmer, y = train$motor_UPDRS, method="s"),
+             cor(x = train$shimmer_db, y = train$motor_UPDRS, method="s"),
+             cor(x = train$shimmer_apq3, y = train$motor_UPDRS, method="s"),
+             cor(x = train$shimmer_apq5, y = train$motor_UPDRS, method="s"),
+             cor(x = train$shimmer_apq11, y = train$motor_UPDRS, method="s"),
+             cor(x = train$shimmer_dda, y = train$motor_UPDRS, method="s"),
+             cor(x = train$nhr, y = train$motor_UPDRS, method="s"),
+             cor(x = train$hnr, y = train$motor_UPDRS, method="s"),
+             cor(x = train$rpde, y = train$motor_UPDRS, method="s"),
+             cor(x = train$dfa, y = train$motor_UPDRS, method="s"),
+             cor(x = train$ppe, y = train$motor_UPDRS, method="s")
+             )
+# info mutua
+v_mutinfo <- c(mut_info_discrete(x = train$jitter_pct, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$jitter_abs, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$jitter_rap, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$jitter_ppq5, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$jitter_ddp, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$shimmer, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$shimmer_db, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$shimmer_apq3, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$shimmer_apq5, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$shimmer_apq11, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$shimmer_dda, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$nhr, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$hnr, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$rpde, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$dfa, y = train$motor_UPDRS),
+             mut_info_discrete(x = train$ppe, y = train$motor_UPDRS)
+             )
+# dataframe para imprimirlo como tabla
+data.frame(v_pearson, v_spearman, v_mutinfo, row.names = c("jitter_pct", "jitter_abs", "jitter_rap", "jitter_ppq5", "jitter_ddp", "shimmer", "shimmer_db", "shimmer_apq3", "shimmer_apq5", "shimmer_apq11", "shimmer_dda", "nhr", "hnr", "rpde", "dfa", "ppe"))
+
 ```
+
+Parece que las tres métricas de la tabla coinciden: una sola variable no
+es suficiente para poder predecir.
+
+Si se tuviese que escoger una de las tres, la mejor candidata es `hnr`,
+ya que tiene los valores más altos. `rpde` se le acerca, pero tiene una
+información mutua menor. `dfa` tiene los tres valores solo un poco más
+bajos que `hnr`.
 
 ### Conclusiones del EDA
 
--   `test_time` es más o menos uniforme, excepto por la mitad y el
-    final.
--   Vamos a predecir `motor_UPDRS` ya que `total_UPDRS` es bastante
-    menos predecible con lo que tenemos.
--   `jitter*` y `shimmer*` forman dos grupos con correlación alta y
-    distribuciones similares, en ambos hay una variable que es
-    redundante y `jitter_abs` es un "perro verde".
--   **PREGUNTAR POR LAS VARIABLES RARAS.**
--   Hay varias edades repetidas y solo existen dos atípicos (36 y 85).
--   El ratio de sexo de nuestros pacientes es distinto al de la
-    población general (más hombres, puede que cause sesgo).
+- `test_time` es más o menos uniforme, excepto por la mitad y el final.
+- Vamos a predecir `motor_UPDRS` ya que `total_UPDRS` es bastante menos
+  predecible con lo que tenemos.
+- `jitter*` y `shimmer*` forman dos grupos con correlación alta y
+  distribuciones similares, en ambos hay una variable que es redundante
+  y `jitter_abs` es un "perro verde".
+- Hay varias edades repetidas y solo existen dos atípicos (36 y 85).
+- El ratio de sexo de nuestros pacientes es distinto al de la población
+  general (más hombres, puede que cause sesgo).
+- Dos tipos de correlación distintos y la información mutua indican que
+  una sola variable no es suficiente para hacer un buen modelo de
+  regresión.
 
 ------------------------------------------------------------------------
 
 ## Aplicación del Modelo de Regresión
 
-preguntar exactamente cómo hacerlo, puesto que es poco específico.
-variable a variable con la objetivo? con la que de mejor resultado?
+hacer modelo con hnr y motor_updrs aquí.
 
-(indica que se han de hacer análisis de residuo y transformación de
-variables si es necesario).
+sería interesante hacerlo también con test_time para hacer un modelo que
+no sea extremadamente lamentable y mostrar que esta variable sería útil
+si los pacientes no se medicasen tampoco(?).
 
-hay que buscar más arriba cual es la que nos hara el mejor modelo usando
-conclusiones del eda.
+**usar transformación boxcox??** solamente si es necesario
 
-**focalizarse en el eda en buscar cuales variables me sirven para
-conocer motor_UPDRS. usar transformación boxcox?? hacer anova luego?
-luego hacer diagnóstico, ya que es obligatorio.**
+**luego hacer diagnóstico, ya que es obligatorio.** (indica que se han
+de hacer análisis de residuo)
 
 ------------------------------------------------------------------------
 
@@ -746,21 +817,19 @@ Se tienen que quitar, con completa seguridad, `jitter_ddp` y
 `shimmer_dda`, al tener exactamente 1 de correlación con una variable
 previa.
 
-Tal vez no se debería de usar la variable `test_time`, por si acaso las
-muestras futuras (cuando se implemente nuestro modelo en la vida real,
-cosa que en realidad no va a suceder pero bueno) no lo tienen. Teniendo
-en cuenta el [paper
-original](https://www.nature.com/articles/npre.2009.3920.1), parece que
-sí tendríamos que borrarla ya que se pidió a los pacientes no medicarse
-durante las mediciones ("All subjects remained un-medicated for the
-six-month duration of the study"), cosa que probablemente no sucederá si
-consiguiésemos muestras nuevas.
+Teniendo en cuenta que en el [paper
+original](https://www.nature.com/articles/npre.2009.3920.1) mencionan
+que los pacientes no estuvieron medicados durante el estudio, y que los
+futuros pacientes en los que se aplicará el modelo podrían estarlo,
+`test_time` podría hacer que nuestras estimaciones empeoren. Encima, los
+datos futuros podrían no tener esta medida, así que por estas dos
+razones vamos a omitir la variable.
 
 *empiezas un modelo con todas, usando info vas quitando las menos útiles
 y llegas a un modelo, luego haces un modelo con backwards/stepwise, con
 etc y luego comparar con AIC, BIC, Cp de Mallows...*
 
-te quedas con uno.
+*te quedas con uno.*
 
 ### Modelos
 
