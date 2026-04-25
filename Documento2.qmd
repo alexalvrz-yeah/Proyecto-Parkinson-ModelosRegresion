@@ -171,7 +171,7 @@ paciente a paciente (de repente cambia de edad más de un año, cambia de
 sexo, etcétera....)
 
 ```{r}
-train_sucio %>% count(subject, sex, age, sort=TRUE)
+train_final %>% count(subject, sex, age, sort=TRUE)
 ```
 
 Se puede ver que no hay nada extraño, no hay ningún caso en el cual haya
@@ -184,8 +184,8 @@ valores negativos del dataset. Teniendo en cuenta lo que significa,
 vamos a quitarlos (no tiene sentido que haya)
 
 ```{r}
-sapply(train_sucio, function(x) sum(is.na(x)))
-train_na <- train_sucio                  
+sapply(train_final, function(x) sum(is.na(x)))
+train_na <- train_final                 
 train_na[train_na < 0] <- NA  # como no hay NA entonces puedo convertirlos y borrarlos
 
 train <- na.omit(train_na)
@@ -1084,28 +1084,748 @@ y llegas a un modelo, luego haces un modelo con backwards/stepwise, con
 etc y luego comparar con AIC, BIC, Cp de Mallows...*
 
 *te quedas con uno.*
+## Regresión Simple
 
+Como hemos podido apreciar en el apartado final del EDA, una sola característica no tiene la potencia suficiente como para predecir la severidad del parkinson. Igual vamos a probar la regresión simple con la predictora mas explicativa a modo ilustrativo
 ```{r}
-plot(train$total_UPDRS)
-```
-
-### Modelos
-
-```{r}
-modelo1 <- lm(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + age + sex + test_time, data = train)
-summary(modelo1)
+regsimple <- lm(motor_UPDRS ~ dfa, data = train)
+summary(regsimple)
 ```
 
 ```{r}
-pred <- predict(modelo1, newdata = test_sucio)
-rmse <- sqrt(mean((test_sucio$motor_UPDRS - pred)^2))
-rmse
+predicciones_simple <- predict(regsimple, newdata = test_final)
 
-mape <- mean(abs((test_sucio$motor_UPDRS - pred) / test_sucio$motor_UPDRS)) * 100
-mape
+# 2. Juntamos la realidad con lo que dijo el modelo
+resultados_simple <- data.frame(
+  real = test_final$motor_UPDRS,
+  predicho = predicciones_simple
+)
+
+# 3. Cálculo del RMSE (Cuánto nos equivocamos en puntos UPDRS)
+rmse_simple <- sqrt(mean((resultados_simple$real - resultados_simple$predicho)^2, na.rm = TRUE))
+
+# 4. Cálculo del MAPE (El porcentaje de error)
+mape_simple <- mean(abs((resultados_simple$real - resultados_simple$predicho) / resultados_simple$real), na.rm = TRUE) * 100
+
+mae_simple <- mean(abs(resultados_simple$real - resultados_simple$predicho), na.rm = TRUE)
+
+# --- EL VEREDICTO DEL MODELO SIMPLE ---
+cat("\n=== ERROR DEL MODELO SIMPLE ===\n")
+cat("RMSE:", round(rmse_simple, 4), "puntos UPDRS\n")
+cat("La media de UPDRS es : ",mean(test_final$motor_UPDRS),"puntos UPDRS\n")
+cat("Siendo los cuartiles (al principio min y al final el max) : ",summary(test_final$motor_UPDRS),"\n")
+cat("MAE:", round(mae_simple,2),"\n")
+cat("===============================\n")
 ```
-Oooooh, cambiando particiones ya no da tanta puta pena
 
+Por lo que vemos de error esperado podriamos estar tanto en el tercer, como primer cuartil, no es muy fiable esto obviamente. Hemos escogido estas métricas, dado que el MAE es el error promedio en absoluto, bastante interpretable en este caso, el RMSE dado que penaliza los errores grandes y está en las mismas unidades que el target, vemos que por eso es mayor que el MAE, dado que ha castigado los errores grandes.
+
+
+```{r}
+residuos_completo <- residuals(regsimple)
+valores_ajustados_completo <- fitted(regsimple)
+residuos_std <- rstandard(regsimple)
+leverage_vals <- hatvalues(regsimple)
+
+leverage_vals <- hatvalues(regsimple)
+residuos_stud <- rstudent(regsimple)  # Residuos estudentizados
+cook_dist <- cooks.distance(regsimple)
+
+datos_leverage <- data.frame(
+  leverage = leverage_vals,
+  residuos_stud = residuos_stud,
+  cook = cook_dist,
+  observacion = 1:length(leverage_vals)
+)
+
+# Calcular umbrales
+n <- nrow(train)
+k <- 1
+leverage_threshold <- 2 * (k + 1) / n
+cook_threshold <- 4 / (n - k - 1)
+
+# Función para crear curvas de Cook
+cook_curve <- function(leverage, cook_value, k) {
+  sqrt(cook_value * (k + 1) * (1 - leverage) / leverage)
+}
+
+# Crear curvas de Cook para diferentes valores
+lev_seq <- seq(0.001, max(leverage_vals) * 1.1, length.out = 100)
+cook_05 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 0.5, k),
+  neg = -cook_curve(lev_seq, 0.5, k)
+)
+cook_1 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 1, k),
+  neg = -cook_curve(lev_seq, 1, k)
+)
+
+
+# 1. Gráfico Residuos vs. Valores Ajustados
+p1_completo <- ggplot(data.frame(x = valores_ajustados_completo, y = residuos_completo), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Residuos vs. Valores Ajustados", x = "Valores Ajustados", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# 2. Gráfico Q-Q Normal
+datos_qq_completo <- data.frame(residuos = residuos_std)
+
+p2_completo <- ggplot(datos_qq_completo, aes(sample = residuos)) +
+  geom_qq(color = "darkred", alpha = 0.7) +
+  geom_qq_line(color = "black", linetype = "dashed") +
+  labs(title = "Normal Q-Q Plot", x = "Cuantiles Teóricos", y = "Cuantiles de la Muestra") +
+  theme_classic(base_size = 10)
+
+# 3. Gráfico Scale-Location
+p3_completo <- ggplot(data.frame(x = valores_ajustados_completo, 
+                                 y = sqrt(abs(residuos_std))), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Scale-Location", x = "Valores Ajustados", 
+       y = expression(sqrt("|Residuos Estandarizados|"))) +
+  theme_classic(base_size = 10)
+
+# 4. Gráfico Residuos vs. Leverage (con curvas de Cook)
+p4_completo <- ggplot(datos_leverage, aes(x = leverage, y = residuos_stud)) +
+  # Curvas de Cook
+  geom_line(data = cook_05, aes(x = leverage, y = pos), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_05, aes(x = leverage, y = neg), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = pos), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = neg), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  # Puntos de datos
+  geom_point(color = "darkred", alpha = 0.7, size = 1.5) +
+  # Líneas de referencia
+  geom_hline(yintercept = 0, color = "gray", linetype = "dashed") +
+  geom_hline(yintercept = c(-2, 2), color = "orange", linetype = "dotted", alpha = 0.7) +
+  geom_vline(xintercept = leverage_threshold, color = "purple", linetype = "dotted", alpha = 0.7) +
+  labs(title = "Residuals vs. Leverage", x = "Leverage", y = "Residuos Estudentizados") +
+  theme_classic(base_size = 10)
+
+# 5. Histograma de residuos
+p5_completo <- ggplot(data.frame(residuos = residuos_completo), aes(x = residuos)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 15, fill = "red", 
+                 color = "black", alpha = 0.7) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuos_completo), sd = sd(residuos_completo)),
+                color = "black", linewidth = 1) +
+  labs(title = "Histograma de Residuos", x = "Residuos", y = "Densidad") +
+  theme_classic(base_size = 10)
+
+# 6. Residuos vs. Orden
+p6_completo <- ggplot(data.frame(orden = 1:length(residuos_completo), 
+                                 residuos = residuos_completo), 
+                      aes(x = orden, y = residuos)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_line(color = "darkred", alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  labs(title = "Residuos vs. Orden", x = "Orden de observación", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# Mostrar todos los gráficos en una rejilla 2x3
+library(gridExtra)
+grid.arrange(p1_completo, p2_completo, p3_completo, 
+             p4_completo, p5_completo, p6_completo, ncol = 3)
+```
+Vemos que en el QQ-Plot tiene unas colas muy pesadas y la autocorrelacción vemos es significativa, tiene sentido al tener observaciones de una misma persona a lo largo del tiempo. Así vemos no solo el modelo no tiene capacidad para predecir, sino que tampoco tiene base matemática ya que viola el supuesto de normalidad de residuos y el de autocorrelacción.
+
+Este mismo problema de autocorrelacción se desarrollará ahora de cara a regresión múltiple, modelos no lineales y GLM's
+
+## Regresión Múltiple y Modelos No Lineales
+
+Respecto al tema de la autocorrelacción : bla bla bla
+
+Vamos a meter todas las variables a lo bruto y vamos a ir reduciendo las variables de forma progresiva, este primer modelo va a doler a los ojos mirarlo, se avisa de antemano
+
+```{r}
+train_selection <- train_final %>%
+  dplyr::select(-subject, -test_time, -total_UPDRS) # Escribe los nombres exactos de tus columnas aquí
+
+test_selection <- test_final %>%
+ dplyr:: select(-subject, -test_time, -total_UPDRS)
+```
+
+```{r}
+modelo_multiple <- lm(motor_UPDRS ~ ., data = train_selection)
+
+# 3. DIAGNÓSTICO DE LA EXPLOSIÓN (VIF)
+# Si el VIF da error, es que la colinealidad es tan bestia que R no puede ni calcularla.
+cat("\n=== ANÁLISIS DE COLINEALIDAD (VIF) ===\n")
+tryCatch({
+  vif_masacre <- vif(modelo_multiple)
+  print(sort(vif_masacre, decreasing = TRUE))
+}, error = function(e) {
+  cat("ERROR: La multicolinealidad es tan alta que la matriz es singular (VIF incalculable).\n")
+})
+
+# 4. PREDICCIONES Y MÉTRICAS EN TEST
+pred_masacre <- predict(modelo_multiple, newdata = test_selection)
+
+resultados_masacre <- data.frame(
+  real = test_selection$motor_UPDRS,
+  predicho = pred_masacre
+)
+
+# Cálculo de las 3 métricas sagradas
+rmse_masacre <- sqrt(mean((resultados_masacre$real - resultados_masacre$predicho)^2, na.rm = TRUE))
+mae_masacre  <- mean(abs(resultados_masacre$real - resultados_masacre$predicho), na.rm = TRUE)
+mape_masacre <- mean(abs((resultados_masacre$real - resultados_masacre$predicho) / resultados_masacre$real), na.rm = TRUE) * 100
+
+# --- RESULTADOS POR CONSOLA ---
+cat("\n========================================\n")
+cat("   ERROR DEL MODELO MÚLTIPLE MASIVO     \n")
+cat("========================================\n")
+cat("RMSE:", round(rmse_masacre, 4), "puntos\n")
+cat("MAE: ", round(mae_masacre, 4), "puntos\n")
+cat("MAPE:", round(mape_masacre, 2), "%\n")
+cat("========================================\n")
+```
+
+Bueno, no soy yo quién para juzgar pero buena pinta no tiene, vamos a empezar con la selección de variables, usando el cirterio de informacion de Akaike (AIC)
+
+```{r}
+# 1. Ejecutamos el algoritmo Stepwise (Dirección: ambos lados)
+# Esto empezará con tu modelo masacre y empezará a quitar basura
+modelo_stepwise <- step(modelo_multiple, direction = "both", trace = 1)
+
+# 2. Vemos qué ha quedado vivo
+summary(modelo_stepwise)
+
+# 3. COMPROBACIÓN CRÍTICA: ¿Ha bajado el VIF?
+cat("\n=== VIF DEL MODELO TRAS SELECCIÓN STEPWISE ===\n")
+vif_step <- vif(modelo_stepwise)
+print(sort(vif_step, decreasing = TRUE))
+
+# 4. MÉTRICAS DE ERROR EN TEST
+pred_step <- predict(modelo_stepwise, newdata = test_selection)
+resultados_step <- data.frame(real = test_final$total_UPDRS, pred = pred_step)
+
+rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
+mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
+mape_step <- mean(abs((resultados_step$real - resultados_step$pred) / resultados_step$real), na.rm = TRUE) * 100
+
+cat("\n=== ERROR DEL MODELO SELECCIONADO (STEPWISE) ===\n")
+cat("RMSE:", round(rmse_step, 4), "\n")
+cat("MAE: ", round(mae_step, 4), "\n")
+cat("MAPE:", round(mape_step, 2), "%\n")
+```
+
+```{r}
+# 1. Ver la estructura final (Variables que sobrevivieron)
+cat("\n=== ESTRUCTURA DEL MODELO FINAL (STEPWISE) ===\n")
+summary(modelo_stepwise)
+
+# 2. Comprobar la salud del modelo (VIF)
+cat("\n=== VIF DEL MODELO FINAL ===\n")
+vif_final <- vif(modelo_stepwise)
+print(sort(vif_final, decreasing = TRUE))
+
+# 3. Diagnóstico visual de supuestos
+cat("\n=== GENERANDO GRÁFICOS DE DIAGNÓSTICO... ===\n")
+par(mfrow = c(2, 2)) # Para ver los 4 gráficos a la vez
+plot(modelo_stepwise)
+```
+
+Vemos que sigue habiendo multicolinealidades muy bastas, vamos a hacerlo manualmente enfocandonos primero en eso, ya que esta puede estar manipulando los p-valores. Voy a eliminar shimmer_apq_11 al ser la de mayor VIF
+
+```{r}
+modmult2 <- lm(formula = motor_UPDRS ~ age + sex + jitter_pct + jitter_abs + 
+    jitter_ppq5 + shimmer + shimmer_db + shimmer_apq3 + shimmer_apq5 + 
+      nhr + hnr + dfa + ppe, data = train_selection)
+summary(modmult2)
+vif(modmult2)
+
+```
+
+Podemos observar los VIF han disminuido aunque sigue quedando trabajo, voy a seguir eliminando variables, en este caso shimmer, la cual tiene el mayor VIF
+```{r}
+modmult3 <- lm(formula = motor_UPDRS ~ age + sex + jitter_pct + jitter_abs + 
+    jitter_ppq5 + shimmer_db + shimmer_apq3 + shimmer_apq5 + 
+      nhr + hnr + dfa + ppe, data = train_selection)
+summary(modmult3)
+vif(modmult3)
+```
+Voy a eliminar shimmer_apq5 ahora
+
+```{r}
+modmult4 <-lm(formula = motor_UPDRS ~ age + sex + jitter_pct + jitter_abs + 
+    jitter_ppq5 + shimmer_db + shimmer_apq3 + 
+      nhr + hnr + dfa + ppe, data = train_selection)
+summary(modmult4)
+vif(modmult4)
+
+```
+Ahora elimino jitter_pct
+
+```{r}
+modmult5 <-lm(formula = motor_UPDRS ~ age + sex + jitter_abs + 
+    jitter_ppq5 + shimmer_db + shimmer_apq3 + 
+      nhr + hnr + dfa + ppe, data = train_selection)
+summary(modmult5)
+vif(modmult5)
+```
+Ahora shimmer_db
+```{r}
+modmult6 <-lm(formula = motor_UPDRS ~ age + sex + jitter_abs + 
+    jitter_ppq5 + shimmer_apq3 + 
+      nhr + hnr + dfa + ppe, data = train_selection)
+summary(modmult6)
+vif(modmult6)
+```
+Ya vemos cosas mas normales, por fin. Ya podemos trabajar con esto
+```{r}
+residuos_completo <- residuals(modmult6)
+valores_ajustados_completo <- fitted(modmult6)
+residuos_std <- rstandard(modmult6)
+leverage_vals <- hatvalues(modmult6)
+
+leverage_vals <- hatvalues(modmult6)
+residuos_stud <- rstudent(modmult6)  # Residuos estudentizados
+cook_dist <- cooks.distance(modmult6)
+
+datos_leverage <- data.frame(
+  leverage = leverage_vals,
+  residuos_stud = residuos_stud,
+  cook = cook_dist,
+  observacion = 1:length(leverage_vals)
+)
+
+# Calcular umbrales
+n <- nrow(train)
+k <- 9
+leverage_threshold <- 2 * (k + 1) / n
+cook_threshold <- 4 / (n - k - 1)
+
+# Función para crear curvas de Cook
+cook_curve <- function(leverage, cook_value, k) {
+  sqrt(cook_value * (k + 1) * (1 - leverage) / leverage)
+}
+
+# Crear curvas de Cook para diferentes valores
+lev_seq <- seq(0.001, max(leverage_vals) * 1.1, length.out = 100)
+cook_05 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 0.5, k),
+  neg = -cook_curve(lev_seq, 0.5, k)
+)
+cook_1 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 1, k),
+  neg = -cook_curve(lev_seq, 1, k)
+)
+
+
+# 1. Gráfico Residuos vs. Valores Ajustados
+p1_completo <- ggplot(data.frame(x = valores_ajustados_completo, y = residuos_completo), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Residuos vs. Valores Ajustados", x = "Valores Ajustados", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# 2. Gráfico Q-Q Normal
+datos_qq_completo <- data.frame(residuos = residuos_std)
+
+p2_completo <- ggplot(datos_qq_completo, aes(sample = residuos)) +
+  geom_qq(color = "darkred", alpha = 0.7) +
+  geom_qq_line(color = "black", linetype = "dashed") +
+  labs(title = "Normal Q-Q Plot", x = "Cuantiles Teóricos", y = "Cuantiles de la Muestra") +
+  theme_classic(base_size = 10)
+
+# 3. Gráfico Scale-Location
+p3_completo <- ggplot(data.frame(x = valores_ajustados_completo, 
+                                 y = sqrt(abs(residuos_std))), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Scale-Location", x = "Valores Ajustados", 
+       y = expression(sqrt("|Residuos Estandarizados|"))) +
+  theme_classic(base_size = 10)
+
+# 4. Gráfico Residuos vs. Leverage (con curvas de Cook)
+p4_completo <- ggplot(datos_leverage, aes(x = leverage, y = residuos_stud)) +
+  # Curvas de Cook
+  geom_line(data = cook_05, aes(x = leverage, y = pos), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_05, aes(x = leverage, y = neg), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = pos), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = neg), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  # Puntos de datos
+  geom_point(color = "darkred", alpha = 0.7, size = 1.5) +
+  # Líneas de referencia
+  geom_hline(yintercept = 0, color = "gray", linetype = "dashed") +
+  geom_hline(yintercept = c(-2, 2), color = "orange", linetype = "dotted", alpha = 0.7) +
+  geom_vline(xintercept = leverage_threshold, color = "purple", linetype = "dotted", alpha = 0.7) +
+  labs(title = "Residuals vs. Leverage", x = "Leverage", y = "Residuos Estudentizados") +
+  theme_classic(base_size = 10)
+
+# 5. Histograma de residuos
+p5_completo <- ggplot(data.frame(residuos = residuos_completo), aes(x = residuos)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 15, fill = "red", 
+                 color = "black", alpha = 0.7) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuos_completo), sd = sd(residuos_completo)),
+                color = "black", linewidth = 1) +
+  labs(title = "Histograma de Residuos", x = "Residuos", y = "Densidad") +
+  theme_classic(base_size = 10)
+
+# 6. Residuos vs. Orden
+p6_completo <- ggplot(data.frame(orden = 1:length(residuos_completo), 
+                                 residuos = residuos_completo), 
+                      aes(x = orden, y = residuos)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_line(color = "darkred", alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  labs(title = "Residuos vs. Orden", x = "Orden de observación", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# Mostrar todos los gráficos en una rejilla 2x3
+library(gridExtra)
+grid.arrange(p1_completo, p2_completo, p3_completo, 
+             p4_completo, p5_completo, p6_completo, ncol = 3)
+```
+Voy a intentar ponerlo en palabras bonitas, se prueba aquí la sospecha sobre la autocorrelacción, lo viola sin ningún tipo de contemplación, el histograma de residuos es plausible que siga una normal, residuos vs valores ajustados pinta mal al final dada la parte descendente y el scale location tiene buena pinta, sirve de consuelo.
+
+Vamos a tomar medidas de rendimiento
+```{r}
+pred_mult <- predict(modmult6, newdata = test_selection)
+resultados_step <- data.frame(real = test_final$total_UPDRS, pred = pred_step)
+
+rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
+mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
+mape_step <- mean(abs((resultados_step$real - resultados_step$pred) / resultados_step$real), na.rm = TRUE) * 100
+
+cat("\n=== ERROR DEL MODELO MÚLTIPLE ===\n")
+cat("RMSE:", round(rmse_step, 4), "\n")
+cat("MAE: ", round(mae_step, 4), "\n")
+cat("MAPE:", round(mape_step, 2), "%\n")
+```
+Vemos el RMSE emperora pero vemos una mejora de multicolinealidad, y mejora en el MAE y MAPE. Pero aún así tema de supuestos vamos fastidiados pese a las mejoras en métricas, sigue siendo inválido por este motivo. Podríamos haber usado regularización para selección de variables igual para reducir el VIF, pero vemos tenemos problemas de relaciones mas que de correlacción entre predictores.
+
+Antes de pasar a modelos generalizados voy a eliminar las variables mas "complicadas" (PPE, HGR,etc..) y usar regularización para selección de variables.
+
+## Regularización (Como Pedro Sanchez para sacar votantes)
+
+```{r}
+# 1. Preparamos los datos (Quitamos las variables que has decidido eliminar)
+# Sustituye 'variables_a_quitar' por los nombres exactos: PPE, HNR, etc.
+train_lasso <- train_selection %>% dplyr::select(-ppe, -hnr,-rpde,-dfa, -matches("subject|test_time|total_UPDRS"))
+test_lasso  <- test_selection %>% dplyr::select(-ppe, -hnr,-rpde,-dfa, -matches("subject|test_time|total_UPDRS"))
+
+# glmnet necesita matrices X y vectores Y
+x_train <- as.matrix(train_lasso %>% dplyr::select(-motor_UPDRS))
+y_train <- train_lasso$motor_UPDRS
+x_test  <- as.matrix(test_lasso %>% dplyr::select(-motor_UPDRS))
+y_test  <- test_lasso$motor_UPDRS
+
+# 2. Buscamos el Lambda óptimo mediante Validación Cruzada
+# alpha = 1 es Lasso (alpha = 0 sería Ridge)
+cv_lasso <- cv.glmnet(x_train, y_train, alpha = 1)
+plot(cv_lasso) # Esto queda genial en la memoria para mostrar el proceso de selección
+
+# 3. Entrenamos el modelo final con el mejor Lambda
+best_lambda <- cv_lasso$lambda.min
+modelo_lasso <- glmnet(x_train, y_train, alpha = 1, lambda = best_lambda)
+
+# 4. ¿Qué variables han sobrevivido?
+coef(modelo_lasso)
+```
+Podemos ver en esta gráfica, lo ideado antes, no ayuda mucho la regularización, siendo inlcuso que al aumentar lambda aumenta el error, no hay forma de sacar más de aquí. Habiamos escogido LASSO justo para eliminar variables y centrarnos en la parsimonia, eliminando incluso variables con relaciones complejas que pudieran fastidiar los residuos, pero aún así sigue persistiendo el problema con los modelos.
+
+```{r}
+# Sacar los coeficientes del modelo en el punto óptimo
+coef(cv_lasso, s = "lambda.min")
+```
+
+```{r}
+# 1. Predicción usando el Lambda óptimo (el que minimiza el error)
+pred_lasso <- predict(cv_lasso, newx = x_test, s = "lambda.min")
+
+# Convertimos a vector para que no dé problemas de dimensiones
+pred_lasso <- as.vector(pred_lasso)
+
+# 2. Consolidamos resultados
+resultados_lasso <- data.frame(
+  real = y_test,
+  predicho = pred_lasso
+)
+
+# 3. Cálculo de las métricas sagradas
+rmse_lasso <- sqrt(mean((resultados_lasso$real - resultados_lasso$predicho)^2))
+mae_lasso  <- mean(abs(resultados_lasso$real - resultados_lasso$predicho))
+mape_lasso <- mean(abs((resultados_lasso$real - resultados_lasso$predicho) / resultados_lasso$real)) * 100
+
+# --- EL VEREDICTO DEL LASSO ---
+cat("\n========================================\n")
+cat("      MÉTRICAS MODELO LASSO (L1)        \n")
+cat("========================================\n")
+cat("RMSE:", round(rmse_lasso, 4), "\n")
+cat("MAE: ", round(mae_lasso, 4), "\n")
+cat("MAPE:", round(mape_lasso, 2), "%\n")
+cat("========================================\n")
+```
+
+```{r}
+coeficientes <- as.matrix(coef(cv_lasso, s = "lambda.min"))
+variables_vivas <- rownames(coeficientes)[coeficientes != 0]
+variables_vivas <- variables_vivas[variables_vivas != "(Intercept)"] # Quitamos el intercepto
+
+# 2. Creamos un modelo lineal 'clásico' (lm) solo con esas variables
+# Esto nos permite usar funciones como rstandard(), hatvalues(), etc.
+formula_espejo <- as.formula(paste("motor_UPDRS ~", paste(variables_vivas, collapse = " + ")))
+modelo_graficos <- lm(formula_espejo, data = train_selection)
+
+# 3. EXTRAEMOS LOS DATOS QUE PIDE TU CÓDIGO
+residuos_completo <- residuals(modelo_graficos)
+valores_ajustados_completo <- fitted(modelo_graficos)
+residuos_std <- rstandard(modelo_graficos)
+leverage_vals <- hatvalues(modelo_graficos)
+residuos_stud <- rstudent(modelo_graficos)
+cook_dist <- cooks.distance(modelo_graficos)
+
+# Ajustamos k al número real de variables seleccionadas
+k <- length(variables_vivas)
+k <- 14
+n <- nrow(train)
+leverage_threshold <- 2 * (k + 1) / n
+cook_threshold <- 4 / (n - k - 1)
+
+# Función para crear curvas de Cook
+cook_curve <- function(leverage, cook_value, k) {
+  sqrt(cook_value * (k + 1) * (1 - leverage) / leverage)
+}
+
+# Crear curvas de Cook para diferentes valores
+lev_seq <- seq(0.001, max(leverage_vals) * 1.1, length.out = 100)
+cook_05 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 0.5, k),
+  neg = -cook_curve(lev_seq, 0.5, k)
+)
+cook_1 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 1, k),
+  neg = -cook_curve(lev_seq, 1, k)
+)
+
+
+# 1. Gráfico Residuos vs. Valores Ajustados
+p1_completo <- ggplot(data.frame(x = valores_ajustados_completo, y = residuos_completo), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Residuos vs. Valores Ajustados", x = "Valores Ajustados", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# 2. Gráfico Q-Q Normal
+datos_qq_completo <- data.frame(residuos = residuos_std)
+
+p2_completo <- ggplot(datos_qq_completo, aes(sample = residuos)) +
+  geom_qq(color = "darkred", alpha = 0.7) +
+  geom_qq_line(color = "black", linetype = "dashed") +
+  labs(title = "Normal Q-Q Plot", x = "Cuantiles Teóricos", y = "Cuantiles de la Muestra") +
+  theme_classic(base_size = 10)
+
+# 3. Gráfico Scale-Location
+p3_completo <- ggplot(data.frame(x = valores_ajustados_completo, 
+                                 y = sqrt(abs(residuos_std))), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Scale-Location", x = "Valores Ajustados", 
+       y = expression(sqrt("|Residuos Estandarizados|"))) +
+  theme_classic(base_size = 10)
+
+# 4. Gráfico Residuos vs. Leverage (con curvas de Cook)
+p4_completo <- ggplot(datos_leverage, aes(x = leverage, y = residuos_stud)) +
+  # Curvas de Cook
+  geom_line(data = cook_05, aes(x = leverage, y = pos), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_05, aes(x = leverage, y = neg), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = pos), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = neg), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  # Puntos de datos
+  geom_point(color = "darkred", alpha = 0.7, size = 1.5) +
+  # Líneas de referencia
+  geom_hline(yintercept = 0, color = "gray", linetype = "dashed") +
+  geom_hline(yintercept = c(-2, 2), color = "orange", linetype = "dotted", alpha = 0.7) +
+  geom_vline(xintercept = leverage_threshold, color = "purple", linetype = "dotted", alpha = 0.7) +
+  labs(title = "Residuals vs. Leverage", x = "Leverage", y = "Residuos Estudentizados") +
+  theme_classic(base_size = 10)
+
+# 5. Histograma de residuos
+p5_completo <- ggplot(data.frame(residuos = residuos_completo), aes(x = residuos)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 15, fill = "red", 
+                 color = "black", alpha = 0.7) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuos_completo), sd = sd(residuos_completo)),
+                color = "black", linewidth = 1) +
+  labs(title = "Histograma de Residuos", x = "Residuos", y = "Densidad") +
+  theme_classic(base_size = 10)
+
+# 6. Residuos vs. Orden
+p6_completo <- ggplot(data.frame(orden = 1:length(residuos_completo), 
+                                 residuos = residuos_completo), 
+                      aes(x = orden, y = residuos)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_line(color = "darkred", alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  labs(title = "Residuos vs. Orden", x = "Orden de observación", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# Mostrar todos los gráficos en una rejilla 2x3
+library(gridExtra)
+grid.arrange(p1_completo, p2_completo, p3_completo, 
+             p4_completo, p5_completo, p6_completo, ncol = 3)
+```
+Vemos se repite lo mismo de antes, la correlacción fatal, posible heterocedasticidad, colas pesadas en el qqplot y residuos vs valores ajustados mal para variar.
+
+## Modelos Lineales Generalizados
+
+Vamos a comenzar con una GAMMA, dado que sus valores son estricamente positivos, estan sesgados, lo que ayuda a las colas pesadas que vemos, la correlacción seguirá siendo un problema y de aquí podemos plantearnos ya unas preguntas.
+
+1. Intentar por cada paciente sacar una única observación. El problema de esto es que terminariamos con una muestra total pequeña, lo que para las particiones ya terminaría en una muestra aún peor, podríamos realizar algun tipo de muestreo como bootstrap pero es una posibilidad bastante complicada, ya que solo tenemos datos de 42 pacientes, lo cual sería una muestra ridiculamente pequeña, antes incluso de tener que particionarla. Aparte de que compactariamos la información, y perderiamos el proceso entero.
+
+2. Intentar submuestrear de forma que tengamos muestras mezcladas para intentar añadir mas aleatoriedad, en vez de particionar por pacientes, particionar las mediciones individuales. Pero esto presenta el problema de que al particionar por estas observaciones individuales, estemos provocando una fuga de datos, por ejemplo podria entrenarse en la medida de un paciente del lunes, y luego evaluarle en la del martes, tendría ya un contexto de la situación previa
+
+Con lo cual vamos a tener que quedarnos de momento particionando por pacientes y asumir que no va a haber independencia entre observaciones, al menos de los mismos pacientes.
+```{r}
+# 1. El Modelo Gamma (Usamos todas las que dejó el Lasso o Stepwise)
+modelo_gamma <- glm(motor_UPDRS ~ age + sex + jitter_abs + jitter_ppq5 + 
+    shimmer_apq3 + nhr + hnr + dfa + ppe, 
+                    data = train_selection, 
+                    family = Gamma(link = "log"))
+
+# 2. Resumen para ver significancia
+summary(modelo_gamma)
+
+# 3. Diagnóstico de residuos (Para GLM usamos residuos de Pearson o Deviance)
+res_gamma <- residuals(modelo_gamma, type = "pearson")
+fit_gamma <- fitted(modelo_gamma)
+
+# Gráfico rápido de comparación
+par(mfrow = c(1, 2))
+plot(fit_gamma, res_gamma, main = "Residuos Pearson: Gamma", col = "darkblue")
+abline(h = 0, lty = 2)
+qqnorm(res_gamma); qqline(res_gamma)
+```
+
+```{r}
+# Predicción (recuerda que el resultado está en escala log, hay que usar type="response")
+pred_gamma <- predict(modelo_gamma, newdata = test_selection, type = "response")
+
+# Métricas
+rmse_gamma <- sqrt(mean((test_selection$motor_UPDRS - pred_gamma)^2))
+mae_gamma  <- mean(abs(test_selection$motor_UPDRS - pred_gamma))
+mape_gamma <- mean(abs((test_selection$motor_UPDRS - pred_gamma) / test_selection$motor_UPDRS)) * 100
+
+cat("RMSE Gamma:", rmse_gamma, "\n")
+cat("MAPE Gamma:", mape_gamma, "%\n")
+cat("MAE Gama:",mae_gamma, "\n")
+```
+Vemos disminuye el RMSE, lo que indica sus errores ya no son tan extremos, pero vemos un aumento en el error porcentual, lo que nos dice que los errores en promedio si son mas grandes, aún sin llegar a grandes extremos lo que nos indica la bajada del RMSE. Voy a probar a las variables mas "complejas" añadir suavizado a ver si mejoran los resultados.
+
+```{r}
+modelo_gam <- gam(motor_UPDRS ~ age + sex + jitter_abs + jitter_ppq5 + 
+                  shimmer_apq3 + s(nhr) + s(hnr) + s(dfa) + s(ppe), 
+                  data = train_selection, 
+                  family = Gamma(link = "log"),
+                  method = "REML") # REML es lo más robusto para estimar las curvas
+
+# 2. Resumen para ver significancia
+summary(modelo_gam)
+
+# 3. Diagnóstico de residuos (Para GLM usamos residuos de Pearson o Deviance)
+res_gamma2 <- residuals(modelo_gam, type = "pearson")
+fit_gamma2 <- fitted(modelo_gam)
+
+# Gráfico rápido de comparación
+par(mfrow = c(1, 2))
+plot(fit_gamma2, res_gamma2, main = "Residuos Pearson: Gamma", col = "darkblue")
+abline(h = 0, lty = 2)
+qqnorm(res_gamma2); qqline(res_gamma2)
+```
+Vemos que el spline de nhr no es significativo al 5%, vamos a quitarlo
+```{r}
+pred_gamma <- predict(modelo_gam, newdata = test_selection, type = "response")
+
+# Métricas
+rmse_gamma <- sqrt(mean((test_selection$motor_UPDRS - pred_gamma)^2))
+mae_gamma  <- mean(abs(test_selection$motor_UPDRS - pred_gamma))
+mape_gamma <- mean(abs((test_selection$motor_UPDRS - pred_gamma) / test_selection$motor_UPDRS)) * 100
+
+cat("RMSE Gamma:", rmse_gamma, "\n")
+cat("MAPE Gamma:", mape_gamma, "%\n")
+cat("MAE Gama:",mae_gamma, "\n")
+```
+No vemos gran mejora en el asunto. Ve
+```{r}
+modelo_gam2 <- gam(motor_UPDRS ~ age + sex + jitter_abs + jitter_ppq5 + 
+                  shimmer_apq3 + s(hnr) + s(dfa) + s(ppe), 
+                  data = train_selection, 
+                  family = Gamma(link = "log"),
+                  method = "REML") # REML es lo más robusto para estimar las curvas
+
+# 2. Resumen para ver significancia
+summary(modelo_gam2)
+
+# 3. Diagnóstico de residuos (Para GLM usamos residuos de Pearson o Deviance)
+res_gamma3 <- residuals(modelo_gam2, type = "pearson")
+fit_gamma3 <- fitted(modelo_gam2)
+
+# Gráfico rápido de comparación
+par(mfrow = c(1, 2))
+plot(fit_gamma3, res_gamma3, main = "Residuos Pearson: Gamma", col = "darkblue")
+abline(h = 0, lty = 2)
+qqnorm(res_gamma3); qqline(res_gamma3)
+```
+```{r}
+pred_gamma <- predict(modelo_gam2, newdata = test_selection, type = "response")
+
+# Métricas
+rmse_gamma <- sqrt(mean((test_selection$motor_UPDRS - pred_gamma)^2))
+mae_gamma  <- mean(abs(test_selection$motor_UPDRS - pred_gamma))
+mape_gamma <- mean(abs((test_selection$motor_UPDRS - pred_gamma) / test_selection$motor_UPDRS)) * 100
+
+cat("RMSE Gamma:", rmse_gamma, "\n")
+cat("MAPE Gamma:", mape_gamma, "%\n")
+cat("MAE Gama:",mae_gamma, "\n")
+```
+
+```{r}
+modelo2 <- lm(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + age + sex + subject, data = train)
+summary(modelo2)
+vif(modelo2)
+```
+
+```{r}
+modelo2 <- lm(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + age + sex + subject, data = train)
+summary(modelo2)
+vif(modelo2)
+```
+
+```{r}
+modelo2 <- lm(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + age + sex + subject, data = train)
+summary(modelo2)
+vif(modelo2)
+```
 esto da puta pena, voy a quitar vars
 Quito test_time ya que las pruebas nos muestran no podemos descartar que sea 0 su coeficiente
 ```{r}
