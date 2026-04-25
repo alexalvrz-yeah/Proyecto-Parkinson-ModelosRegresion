@@ -57,6 +57,7 @@ library(infotheo)
 library(MASS)
 library(car)
 library(glmnet)
+library(mgcv)
 ```
 
 ## Lectura y Descripción de Datos
@@ -112,43 +113,48 @@ de las particiones.
 
 Lo cambio pq da caca en los modelos, voy a estratificar por cuartiles
 ```{r}
-
-# mediante una semilla conseguimos que el ejercicio sea reproducible
+library(dplyr)
 set.seed(123)
 
-# Asignar cuartil a cada sujeto según su motor_UPDRS medio
-sujetos_stats <- parkinson_df %>%
-  group_by(subject) %>%
-  summarise(mean_updrs = mean(motor_UPDRS)) %>%
-  mutate(cuartil = ntile(mean_updrs, 4))
+# 1. ¡AQUÍ ESTÁ LA CLAVE! 
+# Cambia DATOS_ORIGINALES por el nombre del dataframe que cargaste de tu Excel/CSV
+df_base <- parkinson_df 
 
-set.seed(123)
+# 2. Añadimos ID temporal y cuartiles
+df_listo <- df_base %>%
+  mutate(
+    temp_row_id = row_number(),
+    cuartil = ntile(motor_UPDRS, 4)
+  )
 
-# Tomar sujetos de cada cuartil proporcionalmente
-train_sujetos <- sujetos_stats %>%
+# 3. ENTRENAMIENTO (Train): 72%
+train_final <- df_listo %>%
   group_by(cuartil) %>%
   slice_sample(prop = 0.72) %>%
-  pull(subject)
+  ungroup()
 
-restantes <- sujetos_stats %>%
-  filter(!subject %in% train_sujetos)
+# 4. Aislar RESTANTES
+restantes <- df_listo %>%
+  filter(!(temp_row_id %in% train_final$temp_row_id))
 
-test_sujetos <- restantes %>%
+# 5. TEST Y VAL: 50% cada uno de lo que sobra
+test_final <- restantes %>%
   group_by(cuartil) %>%
-  slice_sample(prop = 0.5) %>%
-  pull(subject)
+  slice_sample(prop = 0.50) %>%
+  ungroup()
 
-val_sujetos <- restantes %>%
-  filter(!subject %in% test_sujetos) %>%
-  pull(subject)
+val_final <- restantes %>%
+  filter(!(temp_row_id %in% test_final$temp_row_id))
 
-train_sucio <- subset(parkinson_df, subject %in% train_sujetos)
-test_sucio <- subset(parkinson_df, subject %in% test_sujetos)
-val_sucio <- subset(parkinson_df, subject %in% val_sujetos)
+# 6. LIMPIEZA FINAL
+train_final <- train_final %>% dplyr::select(-cuartil, -temp_row_id)
+test_final  <- test_final  %>% dplyr::select(-cuartil, -temp_row_id)
+val_final   <- val_final   %>% dplyr::select(-cuartil, -temp_row_id)
 
-summary(train_sucio$motor_UPDRS)
-summary(test_sucio$motor_UPDRS)
-summary(val_sucio$motor_UPDRS)
+# --- COMPROBACIÓN ---
+cat("Train:", nrow(train_final), "filas\n")
+cat("Test: ", nrow(test_final), "filas\n")
+cat("Val:  ", nrow(val_final), "filas\n")
 ```
 
 ### Limpieza de Datos
@@ -1297,6 +1303,95 @@ experto) y tiene que tener sentido (una mitad y la otra, a partir de
 cuando pasa a ser mas grave, etc). con el total y así cambiamos.
 
 no parece haber un punto en el que empeoren más los pacientes.
+
+```{r}
+train_final$sex <- as.factor(train_final$sex)
+test_final$sex  <- as.factor(test_final$sex)
+
+# 1. EL ENTRENAMIENTO (La hora de la verdad)
+# Usamos train_final y le metemos curvas (s) a todas las continuas
+modelo_gamma_final <- gam(
+  total_UPDRS ~ s(hnr) + 
+                s(dfa) + 
+                s(shimmer_apq5) + 
+                s(age) + 
+                sex, 
+  family = Gamma(link = "log"), 
+  data = train_final, 
+  method = "REML"
+)
+
+# Echa un ojo rápido a los p-valores y al R-cuadrado ajustado
+summary(modelo_gamma_final)
+
+# 2. PREDICCIONES EN DATOS NUEVOS (TEST)
+# type = "response" es vital para deshacer el logaritmo de la familia Gamma
+predicciones <- predict(modelo_gamma_final, newdata = test_final, type = "response")
+
+# 3. CÁLCULO DE MÉTRICAS
+resultados <- data.frame(
+  real = test_final$total_UPDRS,  # Asegúrate de que esta es la variable que predices
+  predicho = as.numeric(predicciones)
+)
+
+# RMSE: Cuánto nos desviamos en puntos
+rmse_val <- sqrt(mean((resultados$real - resultados$predicho)^2, na.rm = TRUE))
+
+# MAPE: Error porcentual absoluto medio
+mape_val <- mean(abs((resultados$real - resultados$predicho) / resultados$real), na.rm = TRUE) * 100
+
+# --- EL VEREDICTO ---
+cat("\n==================================\n")
+cat("   RESULTADOS EN DATOS DE TEST    \n")
+cat("==================================\n")
+cat("RMSE:", round(rmse_val, 4), "puntos UPDRS\n")
+cat("MAPE:", round(mape_val, 2), "%\n")
+cat("==================================\n")
+```
+
+
+```{r}
+residuos <- residuals(modelo_gamma_final, type = "deviance")
+durbinWatsonTest(as.vector(residuos))
+```
+
+```{r}
+shapiro.test(residuos) # Solo si n es pequeño
+
+# Kolmogorov-Smirnov (más robusto para N grande)
+ks.test(residuos, "pnorm", mean(residuos), sd(residuos))
+```
+
+```{r}
+concurvity(modelo_gamma_final, full = TRUE)
+```
+
+```{r}
+# Ejecuta esto y mira la tabla de abajo
+gam.check(modelo_gamma_final)
+```
+
+```{r}
+# Supongamos que quieres evaluar sobre tu mismo dataset 'train'
+# o si tienes uno de prueba llamado 'test'
+predicciones <- predict(modelo_gamma, newdata = test_sucio, type = "response")
+
+# Creamos un dataframe auxiliar para comparar
+resultados <- data.frame(
+  real = test_sucio$total_UPDRS,
+  predicho = as.numeric(predicciones)
+)
+
+# --- Calcular RMSE ---
+rmse_val <- sqrt(mean((resultados$real - resultados$predicho)^2))
+
+# --- Calcular MAPE ---
+mape_val <- mean(abs((resultados$real - resultados$predicho) / resultados$real)) * 100
+
+# Mostrar resultados
+cat("RMSE:", round(rmse_val, 4), "\n")
+cat("MAPE:", round(mape_val, 2), "%\n")
+```
 
 ------------------------------------------------------------------------
 
