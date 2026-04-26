@@ -1290,7 +1290,7 @@ cat("MAPE:", round(mape_masacre, 2), "%\n")
 cat("========================================\n")
 ```
 
-Bueno, no soy yo quién para juzgar pero buena pinta no tiene, vamos a empezar con la selección de variables, usando el cirterio de informacion de Akaike (AIC)
+Bueno, no soy yo quién para juzgar pero buena pinta no tiene, vamos a empezar con la selección de variables, usando el criterio de informacion de Akaike (AIC) de forma stepwise.
 
 ```{r}
 # 1. Ejecutamos el algoritmo Stepwise (Dirección: ambos lados)
@@ -1502,7 +1502,7 @@ Voy a intentar ponerlo en palabras bonitas, se prueba aquí la sospecha sobre la
 Vamos a tomar medidas de rendimiento
 ```{r}
 pred_mult <- predict(modmult6, newdata = test_selection)
-resultados_step <- data.frame(real = test_final$total_UPDRS, pred = pred_step)
+resultados_step <- data.frame(real = test_final$motor_UPDRS, pred = pred_step)
 
 rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
 mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
@@ -1517,6 +1517,48 @@ Vemos el RMSE emperora pero vemos una mejora de multicolinealidad, y mejora en e
 
 Antes de pasar a modelos generalizados voy a eliminar las variables mas "complicadas" (PPE, HGR,etc..) y usar regularización para selección de variables.
 
+Como último paso voy a intentar sacar relaciones a ver si mejoran algo las métricas, aunque la inferencia al no cumplir los supuestos no sería válida, pero vamos a ver si conseguimos mejora en la predicción
+
+```{r}
+modmult7 <-lm(formula = motor_UPDRS ~ age + sex + sex:jitter_abs + 
+    jitter_ppq5 + shimmer_apq3 + 
+      nhr + hnr + dfa + ppe, data = train_selection)
+summary(modmult7)
+vif(modmult7,type="predictor")
+```
+Voy a eliminar jitter_ppq5 ya que da un p-valor masivo
+Voy a incluir interacción por sexo en la variable ratio de ruido a armónicos, para ver si hay diferencias por sexo
+```{r}
+modmult8 <-lm(formula = motor_UPDRS ~ age + sex + sex:jitter_abs + shimmer_apq3 + 
+       sex:hnr + dfa + ppe, data = train_selection)
+summary(modmult8)
+vif(modmult8,type="predictor")
+```
+Creo da un VIF alto, voy a eliminarla
+
+```{r}
+modmult9 <-lm(formula = motor_UPDRS ~ age + sex + shimmer_apq3 + 
+       sex:hnr + hnr + dfa + ppe, data = train_selection)
+summary(modmult9)
+vif(modmult9)
+```
+
+Vale,el VIF da muy alto, voy a eliminar la relación.
+
+```{r}
+pred_mult <- predict(modmult9, newdata = test_selection)
+resultados_step <- data.frame(real = test_final$motor_UPDRS, pred = pred_step)
+
+rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
+mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
+mape_step <- mean(abs((resultados_step$real - resultados_step$pred) / resultados_step$real), na.rm = TRUE) * 100
+
+cat("\n=== ERROR DEL MODELO MÚLTIPLE ===\n")
+cat("RMSE:", round(rmse_step, 4), "\n")
+cat("MAE: ", round(mae_step, 4), "\n")
+cat("MAPE:", round(mape_step, 2), "%\n")
+```
+Bueno conseguimos, mejorar un poco el MAPE
 ## Regularización (Como Pedro Sanchez para sacar votantes)
 
 ```{r}
@@ -1705,10 +1747,14 @@ Vamos a comenzar con una GAMMA, dado que sus valores son estricamente positivos,
 
 2. Intentar submuestrear de forma que tengamos muestras mezcladas para intentar añadir mas aleatoriedad, en vez de particionar por pacientes, particionar las mediciones individuales. Pero esto presenta el problema de que al particionar por estas observaciones individuales, estemos provocando una fuga de datos, por ejemplo podria entrenarse en la medida de un paciente del lunes, y luego evaluarle en la del martes, tendría ya un contexto de la situación previa
 
+3. Intentar con los modelos generalizados solventar este problema de los supuestos, ya que toda inferencia no es fiable dado que no se cumplen los supuestos bajo los que opera.
+
 Con lo cual vamos a tener que quedarnos de momento particionando por pacientes y asumir que no va a haber independencia entre observaciones, al menos de los mismos pacientes.
+Vamos a probar con el GAMMA que relaja los supuestos de normalidad, pero aún así cargamos con la autocorrelacción de las muestras.
+
 ```{r}
 # 1. El Modelo Gamma (Usamos todas las que dejó el Lasso o Stepwise)
-modelo_gamma <- glm(motor_UPDRS ~ age + sex + jitter_abs + jitter_ppq5 + 
+modelo_gamma <- glm(motor_UPDRS ~ age + sex + jitter_ppq5 + 
     shimmer_apq3 + nhr + hnr + dfa + ppe, 
                     data = train_selection, 
                     family = Gamma(link = "log"))
@@ -1725,6 +1771,33 @@ par(mfrow = c(1, 2))
 plot(fit_gamma, res_gamma, main = "Residuos Pearson: Gamma", col = "darkblue")
 abline(h = 0, lty = 2)
 qqnorm(res_gamma); qqline(res_gamma)
+```
+
+Vamos a eliminar jitter_ppq5 ya que nos indica no es significativa
+
+```{r}
+# 1. El Modelo Gamma (Usamos todas las que dejó el Lasso o Stepwise)
+modelo_gamma <- glm(motor_UPDRS ~ age + sex + 
+    shimmer_apq3 + nhr + hnr + dfa + ppe, 
+                    data = train_selection, 
+                    family = Gamma(link = "log"))
+
+# 2. Resumen para ver significancia
+summary(modelo_gamma)
+
+# 3. Diagnóstico de residuos (Para GLM usamos residuos de Pearson o Deviance)
+res_gamma <- residuals(modelo_gamma, type = "pearson")
+fit_gamma <- fitted(modelo_gamma)
+
+# Gráfico rápido de comparación
+par(mfrow = c(1, 2))
+plot(fit_gamma, res_gamma, main = "Residuos Pearson: Gamma", col = "darkblue")
+abline(h = 0, lty = 2)
+qqnorm(res_gamma); qqline(res_gamma)
+```
+Vemos hemos conseguido un vif bajo a la vez que incluir varias variables
+```{r}
+vif(modelo_gamma)
 ```
 
 ```{r}
@@ -2117,8 +2190,200 @@ cat("MAPE:", round(mape_val, 2), "%\n")
 
 ## Comparación y Evaluación de Modelos
 
-aaaaa
+Llegados aquí ya si que tenemos tres opciones:
 
+1. Mantener las variables tal como están, que tienen interpretabilidad directa, pero la autocorrelacción nos mata los supuestos, lo que nos mata toda inferencia que podamos hacer. Teniendo en cuenta de que el potencial predictivo del modelo no es brillante tampoco
+
+2. Intentar si con la PCA compactar la información en nuevas variables, perdiendo interpretabilidad y explicabilidad, podemos hacer que aumente el potencial predictivo de los modelos.
+
+3. Asumir las limitaciones del dataset, documentarlas, y concluir que la solución correcta requeriría modelos mixtos con efectos aleatorios por paciente o tratamientos con métodos de series temporales como ARIMA para cada paciente individualmente o LSTM si quisieramos capturar dependencias a largo plazo, pero eso está fuera del alcance de esta asignatura.
+
+Me decanto por la opción 2. Ya la opción 3 sería para un estudio a posteriori, y la opción 1 es lo anterior hecho en el trabajo. Además de que dado que no se cumplen los supuestos toda inferencia es inválida, ya que puede estar diciendonos que cierta variable es muy importante pero en verdad no serla.
+
+## Último Intento : PCA
+
+```{r}
+vars_pca <- train_final %>% 
+  dplyr::select(-motor_UPDRS, -subject, -total_UPDRS)
+
+pca_model <- prcomp(vars_pca, center=TRUE, scale=TRUE)
+
+# Ver varianza explicada
+summary(pca_model)
+
+# Gráfico de varianza acumulada
+plot(cumsum(pca_model$sdev^2 / sum(pca_model$sdev^2)), 
+     type="b", xlab="Componentes", ylab="Varianza acumulada",
+     main="Varianza explicada acumulada")
+abline(h=0.90, col="red", lty=2)
+```
+Vemos que incluso para este caso para llegar al 90% de varianza explicada, necesitamos de 4 componentes principales
+```{r}
+pca_train <- as.data.frame(pca_model$x[, 1:6])
+pca_train$motor_UPDRS <- train_final$motor_UPDRS
+
+pca_test <- as.data.frame(predict(pca_model, 
+  dplyr::select(test_final, -motor_UPDRS, -subject, -total_UPDRS))[, 1:6])
+pca_test$motor_UPDRS <- test_final$motor_UPDRS
+```
+
+```{r}
+modelo_pca <- lm(motor_UPDRS ~ ., data=pca_train)
+summary(modelo_pca)
+```
+
+```{r}
+pred_pca <- predict(modelo_pca, newdata=pca_test)
+mape_pca <- mean(abs((test_final$motor_UPDRS - pred_pca) / test_final$motor_UPDRS)) * 100
+rmse_pca <- sqrt(mean((test_final$motor_UPDRS - pred_pca)^2))
+cat("RMSE:", rmse_pca, "\nMAPE:", mape_pca)
+```
+Voy a eliminar PC6 dado que tiene un p-valor de 0.995, practicamente uno
+
+```{r}
+modelo_pca2 <- lm(motor_UPDRS ~ PC1 + PC2 + PC4 + PC5, data=pca_train)
+summary(modelo_pca2)
+```
+
+```{r}
+pred_pca <- predict(modelo_pca2, newdata=pca_test)
+mape_pca <- mean(abs((test_final$motor_UPDRS - pred_pca) / test_final$motor_UPDRS)) * 100
+rmse_pca <- sqrt(mean((test_final$motor_UPDRS - pred_pca)^2))
+cat("RMSE:", rmse_pca, "\nMAPE:", mape_pca)
+```
+
+
+
+Ya no vemos variables no significativas, vamos a sacar los gráficos para los supuestos
+```{r}
+residuos_completo <- residuals(modelo_pca2)
+valores_ajustados_completo <- fitted(modelo_pca2)
+residuos_std <- rstandard(modelo_pca2)
+leverage_vals <- hatvalues(modelo_pca2)
+
+leverage_vals <- hatvalues(modelo_pca2)
+residuos_stud <- rstudent(modelo_pca2)  # Residuos estudentizados
+cook_dist <- cooks.distance(modelo_pca2)
+
+datos_leverage <- data.frame(
+  leverage = leverage_vals,
+  residuos_stud = residuos_stud,
+  cook = cook_dist,
+  observacion = 1:length(leverage_vals)
+)
+
+# Calcular umbrales
+n <- nrow(pca_train)
+k <- 4
+leverage_threshold <- 2 * (k + 1) / n
+cook_threshold <- 4 / (n - k - 1)
+
+# Función para crear curvas de Cook
+cook_curve <- function(leverage, cook_value, k) {
+  sqrt(cook_value * (k + 1) * (1 - leverage) / leverage)
+}
+
+# Crear curvas de Cook para diferentes valores
+lev_seq <- seq(0.001, max(leverage_vals) * 1.1, length.out = 100)
+cook_05 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 0.5, k),
+  neg = -cook_curve(lev_seq, 0.5, k)
+)
+cook_1 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 1, k),
+  neg = -cook_curve(lev_seq, 1, k)
+)
+
+
+# 1. Gráfico Residuos vs. Valores Ajustados
+p1_completo <- ggplot(data.frame(x = valores_ajustados_completo, y = residuos_completo), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Residuos vs. Valores Ajustados", x = "Valores Ajustados", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# 2. Gráfico Q-Q Normal
+datos_qq_completo <- data.frame(residuos = residuos_std)
+
+p2_completo <- ggplot(datos_qq_completo, aes(sample = residuos)) +
+  geom_qq(color = "darkred", alpha = 0.7) +
+  geom_qq_line(color = "black", linetype = "dashed") +
+  labs(title = "Normal Q-Q Plot", x = "Cuantiles Teóricos", y = "Cuantiles de la Muestra") +
+  theme_classic(base_size = 10)
+
+# 3. Gráfico Scale-Location
+p3_completo <- ggplot(data.frame(x = valores_ajustados_completo, 
+                                 y = sqrt(abs(residuos_std))), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Scale-Location", x = "Valores Ajustados", 
+       y = expression(sqrt("|Residuos Estandarizados|"))) +
+  theme_classic(base_size = 10)
+
+# 4. Gráfico Residuos vs. Leverage (con curvas de Cook)
+p4_completo <- ggplot(datos_leverage, aes(x = leverage, y = residuos_stud)) +
+  # Curvas de Cook
+  geom_line(data = cook_05, aes(x = leverage, y = pos), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_05, aes(x = leverage, y = neg), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = pos), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = neg), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  # Puntos de datos
+  geom_point(color = "darkred", alpha = 0.7, size = 1.5) +
+  # Líneas de referencia
+  geom_hline(yintercept = 0, color = "gray", linetype = "dashed") +
+  geom_hline(yintercept = c(-2, 2), color = "orange", linetype = "dotted", alpha = 0.7) +
+  geom_vline(xintercept = leverage_threshold, color = "purple", linetype = "dotted", alpha = 0.7) +
+  labs(title = "Residuals vs. Leverage", x = "Leverage", y = "Residuos Estudentizados") +
+  theme_classic(base_size = 10)
+
+# 5. Histograma de residuos
+p5_completo <- ggplot(data.frame(residuos = residuos_completo), aes(x = residuos)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 15, fill = "red", 
+                 color = "black", alpha = 0.7) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuos_completo), sd = sd(residuos_completo)),
+                color = "black", linewidth = 1) +
+  labs(title = "Histograma de Residuos", x = "Residuos", y = "Densidad") +
+  theme_classic(base_size = 10)
+
+# 6. Residuos vs. Orden
+p6_completo <- ggplot(data.frame(orden = 1:length(residuos_completo), 
+                                 residuos = residuos_completo), 
+                      aes(x = orden, y = residuos)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_line(color = "darkred", alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  labs(title = "Residuos vs. Orden", x = "Orden de observación", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# Mostrar todos los gráficos en una rejilla 2x3
+library(gridExtra)
+grid.arrange(p1_completo, p2_completo, p3_completo, 
+             p4_completo, p5_completo, p6_completo, ncol = 3)
+```
+Igual que antes de la PCA, la violación evidente del supuesto de no autocorrelacción, la presencia de heterocedasticidad, las colas pesadas que dificultan la normalidad y no poder verificar la linealidad dada la forma de embudo que hace. Confirma que la inferencia con las herramientas que tenemos, es imposible. Queda sacar el modelo que mejor métricas tenga enfocandonos en predicción, que de por sí la PCA no mejora mucho esto.
+
+Y ya con esto podemos ver no es un problema de correlacción de variables, sino estructural. Dado el caracter de mediciones a lo largo del tiempo otorgándole una clara dependencia temporal que rompe los supuestos.
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
 ------------------------------------------------------------------------
 
 ## Conclusiones y Trabajo a Futuro
