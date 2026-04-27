@@ -53,7 +53,7 @@ library(summarytools)
 library(ggbeeswarm)
 library(nortest)
 library(infotheo)
-#library(YEAB)
+#library(YEAB) puede que la volvamos a usar
 library(MASS)
 library(car)
 library(glmnet)
@@ -112,32 +112,29 @@ aleatoria directamente, vamos a escoger ciertos subjects para cada una
 de las particiones.
 
 Lo cambio pq da caca en los modelos, voy a estratificar por cuartiles
+
 ```{r}
-library(dplyr)
 set.seed(123)
 
-# 1. ¡AQUÍ ESTÁ LA CLAVE! 
-# Cambia DATOS_ORIGINALES por el nombre del dataframe que cargaste de tu Excel/CSV
+# añadimos id temporal y cuartiles
 df_base <- parkinson_df 
-
-# 2. Añadimos ID temporal y cuartiles
 df_listo <- df_base %>%
   mutate(
     temp_row_id = row_number(),
     cuartil = ntile(motor_UPDRS, 4)
   )
 
-# 3. ENTRENAMIENTO (Train): 72%
+# train es 72%
 train_final <- df_listo %>%
   group_by(cuartil) %>%
   slice_sample(prop = 0.72) %>%
   ungroup()
 
-# 4. Aislar RESTANTES
+# guardo los restantes...
 restantes <- df_listo %>%
   filter(!(temp_row_id %in% train_final$temp_row_id))
 
-# 5. TEST Y VAL: 50% cada uno de lo que sobra
+# ... que son 50% test y 50% val
 test_final <- restantes %>%
   group_by(cuartil) %>%
   slice_sample(prop = 0.50) %>%
@@ -146,16 +143,74 @@ test_final <- restantes %>%
 val_final <- restantes %>%
   filter(!(temp_row_id %in% test_final$temp_row_id))
 
-# 6. LIMPIEZA FINAL
+# quitamos las variables temporales
 train_final <- train_final %>% dplyr::select(-cuartil, -temp_row_id)
 test_final  <- test_final  %>% dplyr::select(-cuartil, -temp_row_id)
 val_final   <- val_final   %>% dplyr::select(-cuartil, -temp_row_id)
 
-# --- COMPROBACIÓN ---
 cat("Train:", nrow(train_final), "filas\n")
 cat("Test: ", nrow(test_final), "filas\n")
 cat("Val:  ", nrow(val_final), "filas\n")
 ```
+
+#### Por qué no estamos haciendo la partición con los sujetos
+
+Antes de llegar a la sección de [Modelos no lineales y transformación de
+variables], se decidió cambiar la partición a esta, siendo que antes
+usábamos una partición que escogía sujetos. El motivo por el cuál hemos
+cambiado es simple: las particiones tenían un parecido bajísimo (entre
+train, test y val) y, al no estar mezclados los datos se podía ver en la
+gráfica de Residuos vs. Orden que se seguía un patrón.
+
+![](images/clipboard-3217712914.png)
+
+Esto significa que los modelos, por fuerza, iban a romper el supuesto de
+independencia, tal y como se muestra en la imagen, siempre.
+
+El código de la antigua partición es el siguiente (comentado, ya que no
+nos interesan los resultados):
+
+```{r}
+# mediante una semilla conseguimos que el ejercicio sea reproducible
+#set.seed(123)
+
+# Asignar cuartil a cada sujeto según su motor_UPDRS medio
+#sujetos_stats <- parkinson_df %>%
+#  group_by(subject) %>%
+#  summarise(mean_updrs = mean(motor_UPDRS)) %>%
+#  mutate(cuartil = ntile(mean_updrs, 4))
+
+# Tomar sujetos de cada cuartil proporcionalmente
+#train_sujetos <- sujetos_stats %>%
+#  group_by(cuartil) %>%
+#  slice_sample(prop = 0.72) %>%
+#  pull(subject)
+
+#restantes <- sujetos_stats %>%
+#  filter(!subject %in% train_sujetos)
+
+#test_sujetos <- restantes %>%
+#  group_by(cuartil) %>%
+#  slice_sample(prop = 0.5) %>%
+#  pull(subject)
+
+#val_sujetos <- restantes %>%
+#  filter(!subject %in% test_sujetos) %>%
+#  pull(subject)
+
+#train_sucio <- subset(parkinson_df, subject %in% train_sujetos)
+#test_sucio <- subset(parkinson_df, subject %in% test_sujetos)
+#val_sucio <- subset(parkinson_df, subject %in% val_sujetos)
+
+#summary(train_sucio$motor_UPDRS)
+#summary(test_sucio$motor_UPDRS)
+#summary(val_sucio$motor_UPDRS)
+```
+
+Además, se han de mezclar los resultados de la partición para que así no
+queden los residuos de esta forma:
+
+![](images/clipboard-1575656904.png)
 
 ### Limpieza de Datos
 
@@ -190,6 +245,24 @@ train_na[train_na < 0] <- NA  # como no hay NA entonces puedo convertirlos y bor
 
 train <- na.omit(train_na)
 head(sort(train$test_time)) # ya no hay valores negativos, solo ceros
+```
+
+```{r}
+sapply(test_final, function(x) sum(is.na(x)))
+test_na <- test_final                
+test_na[test_na < 0] <- NA  # como no hay NA entonces puedo convertirlos y borrarlos
+
+test <- na.omit(test_na)
+head(sort(test$test_time)) # ya no hay valores negativos, solo ceros
+```
+
+```{r}
+sapply(val_final, function(x) sum(is.na(x)))
+val_na <- val_final                 
+val_na[val_na < 0] <- NA  # como no hay NA entonces puedo convertirlos y borrarlos
+
+val <- na.omit(val_na)
+head(sort(val$test_time)) # ya no hay valores negativos, solo ceros
 ```
 
 A pesar de que a priori esto no debería de causar problemas, parece que
@@ -803,8 +876,8 @@ df <- data.frame(v_pearson, v_spearman, v_mutinfo,v_nmi, row.names = nombres)
 df[order(df$v_mutinfo, decreasing = TRUE), ]
 ```
 
-Parece que las tres métricas de la tabla coinciden: una sola variable no
-es suficiente para poder predecir. Necesitamos varias de ellas juntas
+Parece que las cuatro métricas de la tabla coinciden: una sola variable
+no es suficiente para poder predecir. Necesitamos varias de ellas juntas
 para obtener un buen resultado
 
 Si se tuviese que escoger una de las tres, la mejor candidata es `hnr`,
@@ -886,7 +959,7 @@ alguna variable que no fue escogida con el criterio del eda
 bdfa <- boxcox(lm(train$dfa ~ 1))
 bdfa$x[which.max(bdfa$y)] # me pide hacerlo con -1.15
 
-newdfa <- (train$dfa ^ -1.15 - 1) / -1.15
+newdfa <- (train$dfa ^ -0.666 - 1) / -0.666
 
 ggplot() + geom_point(aes(x = newdfa, y = train$motor_UPDRS))
 ```
@@ -899,7 +972,7 @@ veamos uhm jitter_ddp
 bddp <- boxcox(lm(train$jitter_ddp ~ 1))
 bddp$x[which.max(bddp$y)] # me pide hacerlo con -0.424
 
-newddp <- (train$jitter_ddp ^ -0.424 - 1) / -0.424
+newddp <- (train$jitter_ddp ^ -0.303 - 1) / -0.303
 
 ggplot(train) + geom_point(aes(x = jitter_ddp, y = motor_UPDRS))
 ggplot() + geom_point(aes(x = newddp, y = train$motor_UPDRS))
@@ -913,7 +986,7 @@ por último con shimmerapq11??
 bapq11 <- boxcox(lm(train$shimmer_apq11 ~ 1))
 bapq11$x[which.max(bapq11$y)] # me pide hacerlo con -0.222
 
-newapq11 <- (train$shimmer_apq11 ^ -0.222 - 1) / -0.222
+newapq11 <- (train$shimmer_apq11 ^ -0.141 - 1) / -0.141
 
 ggplot(train) + geom_point(aes(x = shimmer_apq11, y = motor_UPDRS))
 ggplot() + geom_point(aes(x = newapq11, y = train$motor_UPDRS))
@@ -1083,10 +1156,13 @@ razones vamos a omitir la variable.
 y llegas a un modelo, luego haces un modelo con backwards/stepwise, con
 etc y luego comparar con AIC, BIC, Cp de Mallows...*
 
-*te quedas con uno.*
-## Regresión Simple
+*te quedas con uno.* \## Regresión Simple
 
-Como hemos podido apreciar en el apartado final del EDA, una sola característica no tiene la potencia suficiente como para predecir la severidad del parkinson. Igual vamos a probar la regresión simple con la predictora mas explicativa a modo ilustrativo
+Como hemos podido apreciar en el apartado final del EDA, una sola
+característica no tiene la potencia suficiente como para predecir la
+severidad del parkinson. Igual vamos a probar la regresión simple con la
+predictora mas explicativa a modo ilustrativo
+
 ```{r}
 regsimple <- lm(motor_UPDRS ~ dfa, data = train)
 summary(regsimple)
@@ -1118,8 +1194,12 @@ cat("MAE:", round(mae_simple,2),"\n")
 cat("===============================\n")
 ```
 
-Por lo que vemos de error esperado podriamos estar tanto en el tercer, como primer cuartil, no es muy fiable esto obviamente. Hemos escogido estas métricas, dado que el MAE es el error promedio en absoluto, bastante interpretable en este caso, el RMSE dado que penaliza los errores grandes y está en las mismas unidades que el target, vemos que por eso es mayor que el MAE, dado que ha castigado los errores grandes.
-
+Por lo que vemos de error esperado podriamos estar tanto en el tercer,
+como primer cuartil, no es muy fiable esto obviamente. Hemos escogido
+estas métricas, dado que el MAE es el error promedio en absoluto,
+bastante interpretable en este caso, el RMSE dado que penaliza los
+errores grandes y está en las mismas unidades que el target, vemos que
+por eso es mayor que el MAE, dado que ha castigado los errores grandes.
 
 ```{r}
 residuos_completo <- residuals(regsimple)
@@ -1236,15 +1316,24 @@ library(gridExtra)
 grid.arrange(p1_completo, p2_completo, p3_completo, 
              p4_completo, p5_completo, p6_completo, ncol = 3)
 ```
-Vemos que en el QQ-Plot tiene unas colas muy pesadas y la autocorrelacción vemos es significativa, tiene sentido al tener observaciones de una misma persona a lo largo del tiempo. Así vemos no solo el modelo no tiene capacidad para predecir, sino que tampoco tiene base matemática ya que viola el supuesto de normalidad de residuos y el de autocorrelacción.
 
-Este mismo problema de autocorrelacción se desarrollará ahora de cara a regresión múltiple, modelos no lineales y GLM's
+Vemos que en el QQ-Plot tiene unas colas muy pesadas y la
+autocorrelacción vemos es significativa, tiene sentido al tener
+observaciones de una misma persona a lo largo del tiempo. Así vemos no
+solo el modelo no tiene capacidad para predecir, sino que tampoco tiene
+base matemática ya que viola el supuesto de normalidad de residuos y el
+de autocorrelacción.
+
+Este mismo problema de autocorrelacción se desarrollará ahora de cara a
+regresión múltiple, modelos no lineales y GLM's
 
 ## Regresión Múltiple y Modelos No Lineales
 
 Respecto al tema de la autocorrelacción : bla bla bla
 
-Vamos a meter todas las variables a lo bruto y vamos a ir reduciendo las variables de forma progresiva, este primer modelo va a doler a los ojos mirarlo, se avisa de antemano
+Vamos a meter todas las variables a lo bruto y vamos a ir reduciendo las
+variables de forma progresiva, este primer modelo va a doler a los ojos
+mirarlo, se avisa de antemano
 
 ```{r}
 train_selection <- train_final %>%
@@ -1290,7 +1379,9 @@ cat("MAPE:", round(mape_masacre, 2), "%\n")
 cat("========================================\n")
 ```
 
-Bueno, no soy yo quién para juzgar pero buena pinta no tiene, vamos a empezar con la selección de variables, usando el criterio de informacion de Akaike (AIC) de forma stepwise.
+Bueno, no soy yo quién para juzgar pero buena pinta no tiene, vamos a
+empezar con la selección de variables, usando el criterio de informacion
+de Akaike (AIC) de forma stepwise.
 
 ```{r}
 # 1. Ejecutamos el algoritmo Stepwise (Dirección: ambos lados)
@@ -1335,7 +1426,10 @@ par(mfrow = c(2, 2)) # Para ver los 4 gráficos a la vez
 plot(modelo_stepwise)
 ```
 
-Vemos que sigue habiendo multicolinealidades muy bastas, vamos a hacerlo manualmente enfocandonos primero en eso, ya que esta puede estar manipulando los p-valores. Voy a eliminar shimmer_apq_11 al ser la de mayor VIF
+Vemos que sigue habiendo multicolinealidades muy bastas, vamos a hacerlo
+manualmente enfocandonos primero en eso, ya que esta puede estar
+manipulando los p-valores. Voy a eliminar shimmer_apq_11 al ser la de
+mayor VIF
 
 ```{r}
 modmult2 <- lm(formula = motor_UPDRS ~ age + sex + jitter_pct + jitter_abs + 
@@ -1346,7 +1440,10 @@ vif(modmult2)
 
 ```
 
-Podemos observar los VIF han disminuido aunque sigue quedando trabajo, voy a seguir eliminando variables, en este caso shimmer, la cual tiene el mayor VIF
+Podemos observar los VIF han disminuido aunque sigue quedando trabajo,
+voy a seguir eliminando variables, en este caso shimmer, la cual tiene
+el mayor VIF
+
 ```{r}
 modmult3 <- lm(formula = motor_UPDRS ~ age + sex + jitter_pct + jitter_abs + 
     jitter_ppq5 + shimmer_db + shimmer_apq3 + shimmer_apq5 + 
@@ -1354,6 +1451,7 @@ modmult3 <- lm(formula = motor_UPDRS ~ age + sex + jitter_pct + jitter_abs +
 summary(modmult3)
 vif(modmult3)
 ```
+
 Voy a eliminar shimmer_apq5 ahora
 
 ```{r}
@@ -1364,6 +1462,7 @@ summary(modmult4)
 vif(modmult4)
 
 ```
+
 Ahora elimino jitter_pct
 
 ```{r}
@@ -1373,7 +1472,9 @@ modmult5 <-lm(formula = motor_UPDRS ~ age + sex + jitter_abs +
 summary(modmult5)
 vif(modmult5)
 ```
+
 Ahora shimmer_db
+
 ```{r}
 modmult6 <-lm(formula = motor_UPDRS ~ age + sex + jitter_abs + 
     jitter_ppq5 + shimmer_apq3 + 
@@ -1381,7 +1482,9 @@ modmult6 <-lm(formula = motor_UPDRS ~ age + sex + jitter_abs +
 summary(modmult6)
 vif(modmult6)
 ```
+
 Ya vemos cosas mas normales, por fin. Ya podemos trabajar con esto
+
 ```{r}
 residuos_completo <- residuals(modmult6)
 valores_ajustados_completo <- fitted(modmult6)
@@ -1497,9 +1600,15 @@ library(gridExtra)
 grid.arrange(p1_completo, p2_completo, p3_completo, 
              p4_completo, p5_completo, p6_completo, ncol = 3)
 ```
-Voy a intentar ponerlo en palabras bonitas, se prueba aquí la sospecha sobre la autocorrelacción, lo viola sin ningún tipo de contemplación, el histograma de residuos es plausible que siga una normal, residuos vs valores ajustados pinta mal al final dada la parte descendente y el scale location tiene buena pinta, sirve de consuelo.
+
+Voy a intentar ponerlo en palabras bonitas, se prueba aquí la sospecha
+sobre la autocorrelacción, lo viola sin ningún tipo de contemplación, el
+histograma de residuos es plausible que siga una normal, residuos vs
+valores ajustados pinta mal al final dada la parte descendente y el
+scale location tiene buena pinta, sirve de consuelo.
 
 Vamos a tomar medidas de rendimiento
+
 ```{r}
 pred_mult <- predict(modmult6, newdata = test_selection)
 resultados_step <- data.frame(real = test_final$motor_UPDRS, pred = pred_step)
@@ -1513,11 +1622,21 @@ cat("RMSE:", round(rmse_step, 4), "\n")
 cat("MAE: ", round(mae_step, 4), "\n")
 cat("MAPE:", round(mape_step, 2), "%\n")
 ```
-Vemos el RMSE emperora pero vemos una mejora de multicolinealidad, y mejora en el MAE y MAPE. Pero aún así tema de supuestos vamos fastidiados pese a las mejoras en métricas, sigue siendo inválido por este motivo. Podríamos haber usado regularización para selección de variables igual para reducir el VIF, pero vemos tenemos problemas de relaciones mas que de correlacción entre predictores.
 
-Antes de pasar a modelos generalizados voy a eliminar las variables mas "complicadas" (PPE, HGR,etc..) y usar regularización para selección de variables.
+Vemos el RMSE emperora pero vemos una mejora de multicolinealidad, y
+mejora en el MAE y MAPE. Pero aún así tema de supuestos vamos
+fastidiados pese a las mejoras en métricas, sigue siendo inválido por
+este motivo. Podríamos haber usado regularización para selección de
+variables igual para reducir el VIF, pero vemos tenemos problemas de
+relaciones mas que de correlacción entre predictores.
 
-Como último paso voy a intentar sacar relaciones a ver si mejoran algo las métricas, aunque la inferencia al no cumplir los supuestos no sería válida, pero vamos a ver si conseguimos mejora en la predicción
+Antes de pasar a modelos generalizados voy a eliminar las variables mas
+"complicadas" (PPE, HGR,etc..) y usar regularización para selección de
+variables.
+
+Como último paso voy a intentar sacar relaciones a ver si mejoran algo
+las métricas, aunque la inferencia al no cumplir los supuestos no sería
+válida, pero vamos a ver si conseguimos mejora en la predicción
 
 ```{r}
 modmult7 <-lm(formula = motor_UPDRS ~ age + sex + sex:jitter_abs + 
@@ -1526,14 +1645,18 @@ modmult7 <-lm(formula = motor_UPDRS ~ age + sex + sex:jitter_abs +
 summary(modmult7)
 vif(modmult7,type="predictor")
 ```
-Voy a eliminar jitter_ppq5 ya que da un p-valor masivo
-Voy a incluir interacción por sexo en la variable ratio de ruido a armónicos, para ver si hay diferencias por sexo
+
+Voy a eliminar jitter_ppq5 ya que da un p-valor masivo Voy a incluir
+interacción por sexo en la variable ratio de ruido a armónicos, para ver
+si hay diferencias por sexo
+
 ```{r}
 modmult8 <-lm(formula = motor_UPDRS ~ age + sex + sex:jitter_abs + shimmer_apq3 + 
        sex:hnr + dfa + ppe, data = train_selection)
 summary(modmult8)
 vif(modmult8,type="predictor")
 ```
+
 Creo da un VIF alto, voy a eliminarla
 
 ```{r}
@@ -1558,8 +1681,9 @@ cat("RMSE:", round(rmse_step, 4), "\n")
 cat("MAE: ", round(mae_step, 4), "\n")
 cat("MAPE:", round(mape_step, 2), "%\n")
 ```
-Bueno conseguimos, mejorar un poco el MAPE
-## Regularización (Como Pedro Sanchez para sacar votantes)
+
+Bueno conseguimos, mejorar un poco el MAPE \## Regularización (Como
+Pedro Sanchez para sacar votantes)
 
 ```{r}
 # 1. Preparamos los datos (Quitamos las variables que has decidido eliminar)
@@ -1585,7 +1709,13 @@ modelo_lasso <- glmnet(x_train, y_train, alpha = 1, lambda = best_lambda)
 # 4. ¿Qué variables han sobrevivido?
 coef(modelo_lasso)
 ```
-Podemos ver en esta gráfica, lo ideado antes, no ayuda mucho la regularización, siendo inlcuso que al aumentar lambda aumenta el error, no hay forma de sacar más de aquí. Habiamos escogido LASSO justo para eliminar variables y centrarnos en la parsimonia, eliminando incluso variables con relaciones complejas que pudieran fastidiar los residuos, pero aún así sigue persistiendo el problema con los modelos.
+
+Podemos ver en esta gráfica, lo ideado antes, no ayuda mucho la
+regularización, siendo inlcuso que al aumentar lambda aumenta el error,
+no hay forma de sacar más de aquí. Habiamos escogido LASSO justo para
+eliminar variables y centrarnos en la parsimonia, eliminando incluso
+variables con relaciones complejas que pudieran fastidiar los residuos,
+pero aún así sigue persistiendo el problema con los modelos.
 
 ```{r}
 # Sacar los coeficientes del modelo en el punto óptimo
@@ -1737,20 +1867,45 @@ library(gridExtra)
 grid.arrange(p1_completo, p2_completo, p3_completo, 
              p4_completo, p5_completo, p6_completo, ncol = 3)
 ```
-Vemos se repite lo mismo de antes, la correlacción fatal, posible heterocedasticidad, colas pesadas en el qqplot y residuos vs valores ajustados mal para variar.
+
+Vemos se repite lo mismo de antes, la correlacción fatal, posible
+heterocedasticidad, colas pesadas en el qqplot y residuos vs valores
+ajustados mal para variar.
 
 ## Modelos Lineales Generalizados
 
-Vamos a comenzar con una GAMMA, dado que sus valores son estricamente positivos, estan sesgados, lo que ayuda a las colas pesadas que vemos, la correlacción seguirá siendo un problema y de aquí podemos plantearnos ya unas preguntas.
+Vamos a comenzar con una GAMMA, dado que sus valores son estricamente
+positivos, estan sesgados, lo que ayuda a las colas pesadas que vemos,
+la correlacción seguirá siendo un problema y de aquí podemos plantearnos
+ya unas preguntas.
 
-1. Intentar por cada paciente sacar una única observación. El problema de esto es que terminariamos con una muestra total pequeña, lo que para las particiones ya terminaría en una muestra aún peor, podríamos realizar algun tipo de muestreo como bootstrap pero es una posibilidad bastante complicada, ya que solo tenemos datos de 42 pacientes, lo cual sería una muestra ridiculamente pequeña, antes incluso de tener que particionarla. Aparte de que compactariamos la información, y perderiamos el proceso entero.
+1.  Intentar por cada paciente sacar una única observación. El problema
+    de esto es que terminariamos con una muestra total pequeña, lo que
+    para las particiones ya terminaría en una muestra aún peor,
+    podríamos realizar algun tipo de muestreo como bootstrap pero es una
+    posibilidad bastante complicada, ya que solo tenemos datos de 42
+    pacientes, lo cual sería una muestra ridiculamente pequeña, antes
+    incluso de tener que particionarla. Aparte de que compactariamos la
+    información, y perderiamos el proceso entero.
 
-2. Intentar submuestrear de forma que tengamos muestras mezcladas para intentar añadir mas aleatoriedad, en vez de particionar por pacientes, particionar las mediciones individuales. Pero esto presenta el problema de que al particionar por estas observaciones individuales, estemos provocando una fuga de datos, por ejemplo podria entrenarse en la medida de un paciente del lunes, y luego evaluarle en la del martes, tendría ya un contexto de la situación previa
+2.  Intentar submuestrear de forma que tengamos muestras mezcladas para
+    intentar añadir mas aleatoriedad, en vez de particionar por
+    pacientes, particionar las mediciones individuales. Pero esto
+    presenta el problema de que al particionar por estas observaciones
+    individuales, estemos provocando una fuga de datos, por ejemplo
+    podria entrenarse en la medida de un paciente del lunes, y luego
+    evaluarle en la del martes, tendría ya un contexto de la situación
+    previa
 
-3. Intentar con los modelos generalizados solventar este problema de los supuestos, ya que toda inferencia no es fiable dado que no se cumplen los supuestos bajo los que opera.
+3.  Intentar con los modelos generalizados solventar este problema de
+    los supuestos, ya que toda inferencia no es fiable dado que no se
+    cumplen los supuestos bajo los que opera.
 
-Con lo cual vamos a tener que quedarnos de momento particionando por pacientes y asumir que no va a haber independencia entre observaciones, al menos de los mismos pacientes.
-Vamos a probar con el GAMMA que relaja los supuestos de normalidad, pero aún así cargamos con la autocorrelacción de las muestras.
+Con lo cual vamos a tener que quedarnos de momento particionando por
+pacientes y asumir que no va a haber independencia entre observaciones,
+al menos de los mismos pacientes. Vamos a probar con el GAMMA que relaja
+los supuestos de normalidad, pero aún así cargamos con la
+autocorrelacción de las muestras.
 
 ```{r}
 # 1. El Modelo Gamma (Usamos todas las que dejó el Lasso o Stepwise)
@@ -1795,7 +1950,9 @@ plot(fit_gamma, res_gamma, main = "Residuos Pearson: Gamma", col = "darkblue")
 abline(h = 0, lty = 2)
 qqnorm(res_gamma); qqline(res_gamma)
 ```
+
 Vemos hemos conseguido un vif bajo a la vez que incluir varias variables
+
 ```{r}
 vif(modelo_gamma)
 ```
@@ -1813,7 +1970,13 @@ cat("RMSE Gamma:", rmse_gamma, "\n")
 cat("MAPE Gamma:", mape_gamma, "%\n")
 cat("MAE Gama:",mae_gamma, "\n")
 ```
-Vemos disminuye el RMSE, lo que indica sus errores ya no son tan extremos, pero vemos un aumento en el error porcentual, lo que nos dice que los errores en promedio si son mas grandes, aún sin llegar a grandes extremos lo que nos indica la bajada del RMSE. Voy a probar a las variables mas "complejas" añadir suavizado a ver si mejoran los resultados.
+
+Vemos disminuye el RMSE, lo que indica sus errores ya no son tan
+extremos, pero vemos un aumento en el error porcentual, lo que nos dice
+que los errores en promedio si son mas grandes, aún sin llegar a grandes
+extremos lo que nos indica la bajada del RMSE. Voy a probar a las
+variables mas "complejas" añadir suavizado a ver si mejoran los
+resultados.
 
 ```{r}
 modelo_gam <- gam(motor_UPDRS ~ age + sex + jitter_abs + jitter_ppq5 + 
@@ -1835,7 +1998,9 @@ plot(fit_gamma2, res_gamma2, main = "Residuos Pearson: Gamma", col = "darkblue")
 abline(h = 0, lty = 2)
 qqnorm(res_gamma2); qqline(res_gamma2)
 ```
+
 Vemos que el spline de nhr no es significativo al 5%, vamos a quitarlo
+
 ```{r}
 pred_gamma <- predict(modelo_gam, newdata = test_selection, type = "response")
 
@@ -1848,7 +2013,9 @@ cat("RMSE Gamma:", rmse_gamma, "\n")
 cat("MAPE Gamma:", mape_gamma, "%\n")
 cat("MAE Gama:",mae_gamma, "\n")
 ```
+
 No vemos gran mejora en el asunto. Ve
+
 ```{r}
 modelo_gam2 <- gam(motor_UPDRS ~ age + sex + jitter_abs + jitter_ppq5 + 
                   shimmer_apq3 + s(hnr) + s(dfa) + s(ppe), 
@@ -1869,6 +2036,7 @@ plot(fit_gamma3, res_gamma3, main = "Residuos Pearson: Gamma", col = "darkblue")
 abline(h = 0, lty = 2)
 qqnorm(res_gamma3); qqline(res_gamma3)
 ```
+
 ```{r}
 pred_gamma <- predict(modelo_gam2, newdata = test_selection, type = "response")
 
@@ -1899,22 +2067,27 @@ modelo2 <- lm(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + age + sex + subject, data
 summary(modelo2)
 vif(modelo2)
 ```
-esto da puta pena, voy a quitar vars
-Quito test_time ya que las pruebas nos muestran no podemos descartar que sea 0 su coeficiente
+
+esto da puta pena, voy a quitar vars Quito test_time ya que las pruebas
+nos muestran no podemos descartar que sea 0 su coeficiente
+
 ```{r}
 modelo2 <- lm(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + age + sex + subject, data = train)
 summary(modelo2)
 vif(modelo2)
 ```
+
 Ahora no da puto asco la salida esta
 
-Veo diferencia por sexo, sigue dando puto asco el modelo, error del 102% la madre que me parió
+Veo diferencia por sexo, sigue dando puto asco el modelo, error del 102%
+la madre que me parió
+
 ```{r}
-pred <- predict(modelo2, newdata = test_sucio)
-rmse <- sqrt(mean((test_sucio$motor_UPDRS - pred)^2))
+pred <- predict(modelo2, newdata = test)
+rmse <- sqrt(mean((test$motor_UPDRS - pred)^2))
 rmse
 
-mape <- mean(abs((test_sucio$motor_UPDRS - pred) / test_sucio$motor_UPDRS)) * 100
+mape <- mean(abs((test$motor_UPDRS - pred) / test$motor_UPDRS)) * 100
 mape
 ```
 
@@ -2034,10 +2207,8 @@ grid.arrange(p1_completo, p2_completo, p3_completo,
              p4_completo, p5_completo, p6_completo, ncol = 3)
 ```
 
-Está disminuyendo, poco a poco, como le digo a mi novia al hacerlo
-Este parece de momento el mejor, el modelo 2
-
-
+Está disminuyendo, poco a poco, como le digo a mi novia al hacerlo Este
+parece de momento el mejor, el modelo 2
 
 ```{r}
 modelo3 <- lm(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + ppe + jitter_abs, data = train)
@@ -2045,11 +2216,11 @@ summary(modelo3)
 ```
 
 ```{r}
-pred <- predict(modelo3, newdata = test_sucio)
-rmse <- sqrt(mean((test_sucio$motor_UPDRS - pred)^2))
+pred <- predict(modelo3, newdata = test)
+rmse <- sqrt(mean((test$motor_UPDRS - pred)^2))
 rmse
 
-mape <- mean(abs((test_sucio$motor_UPDRS - pred) / test_sucio$motor_UPDRS)) * 100
+mape <- mean(abs((test$motor_UPDRS - pred) / test$motor_UPDRS)) * 100
 mape
 vif(modelo3)
 ```
@@ -2058,17 +2229,17 @@ me está tocando los cojones esto
 
 ```{r}
 summary(train$motor_UPDRS)
-summary(test_sucio$motor_UPDRS)
+summary(test$motor_UPDRS)
 ```
 
 Vamos a regularizar, como pedro sanchez buscando votantes
 
 ```{r}
-X_train <- model.matrix(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + ppe + jitter_abs + age + sex + test_time, data=train_sucio)[,-1]
-y_train <- train_sucio$motor_UPDRS
+X_train <- model.matrix(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + ppe + jitter_abs + age + sex + test_time, data=train)[,-1]
+y_train <- train$motor_UPDRS
 
-X_test <- model.matrix(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + ppe + jitter_abs + age + sex + test_time, data=test_sucio)[,-1]
-y_test <- test_sucio$motor_UPDRS
+X_test <- model.matrix(motor_UPDRS ~ hnr + dfa + shimmer_apq5 + ppe + jitter_abs + age + sex + test_time, data=test)[,-1]
+y_test <- test$motor_UPDRS
 
 # Ridge con cross-validation para elegir lambda
 modelo_ridge <- cv.glmnet(X_train, y_train, alpha=0)
@@ -2142,7 +2313,6 @@ cat("MAPE:", round(mape_val, 2), "%\n")
 cat("==================================\n")
 ```
 
-
 ```{r}
 residuos <- residuals(modelo_gamma_final, type = "deviance")
 durbinWatsonTest(as.vector(residuos))
@@ -2167,11 +2337,11 @@ gam.check(modelo_gamma_final)
 ```{r}
 # Supongamos que quieres evaluar sobre tu mismo dataset 'train'
 # o si tienes uno de prueba llamado 'test'
-predicciones <- predict(modelo_gamma, newdata = test_sucio, type = "response")
+predicciones <- predict(modelo_gamma, newdata = test, type = "response")
 
 # Creamos un dataframe auxiliar para comparar
 resultados <- data.frame(
-  real = test_sucio$total_UPDRS,
+  real = test$total_UPDRS,
   predicho = as.numeric(predicciones)
 )
 
@@ -2192,19 +2362,33 @@ cat("MAPE:", round(mape_val, 2), "%\n")
 
 Llegados aquí ya si que tenemos tres opciones:
 
-1. Mantener las variables tal como están, que tienen interpretabilidad directa, pero la autocorrelacción nos mata los supuestos, lo que nos mata toda inferencia que podamos hacer. Teniendo en cuenta de que el potencial predictivo del modelo no es brillante tampoco
+1.  Mantener las variables tal como están, que tienen interpretabilidad
+    directa, pero la autocorrelacción nos mata los supuestos, lo que nos
+    mata toda inferencia que podamos hacer. Teniendo en cuenta de que el
+    potencial predictivo del modelo no es brillante tampoco
 
-2. Intentar si con la PCA compactar la información en nuevas variables, perdiendo interpretabilidad y explicabilidad, podemos hacer que aumente el potencial predictivo de los modelos.
+2.  Intentar si con la PCA compactar la información en nuevas variables,
+    perdiendo interpretabilidad y explicabilidad, podemos hacer que
+    aumente el potencial predictivo de los modelos.
 
-3. Asumir las limitaciones del dataset, documentarlas, y concluir que la solución correcta requeriría modelos mixtos con efectos aleatorios por paciente o tratamientos con métodos de series temporales como ARIMA para cada paciente individualmente o LSTM si quisieramos capturar dependencias a largo plazo, pero eso está fuera del alcance de esta asignatura.
+3.  Asumir las limitaciones del dataset, documentarlas, y concluir que
+    la solución correcta requeriría modelos mixtos con efectos
+    aleatorios por paciente o tratamientos con métodos de series
+    temporales como ARIMA para cada paciente individualmente o LSTM si
+    quisieramos capturar dependencias a largo plazo, pero eso está fuera
+    del alcance de esta asignatura.
 
-Me decanto por la opción 2. Ya la opción 3 sería para un estudio a posteriori, y la opción 1 es lo anterior hecho en el trabajo. Además de que dado que no se cumplen los supuestos toda inferencia es inválida, ya que puede estar diciendonos que cierta variable es muy importante pero en verdad no serla.
+Me decanto por la opción 2. Ya la opción 3 sería para un estudio a
+posteriori, y la opción 1 es lo anterior hecho en el trabajo. Además de
+que dado que no se cumplen los supuestos toda inferencia es inválida, ya
+que puede estar diciendonos que cierta variable es muy importante pero
+en verdad no serla.
 
 ## Último Intento : PCA
 
 ```{r}
 vars_pca <- train_final %>% 
-  dplyr::select(-motor_UPDRS, -subject, -total_UPDRS)
+  dplyr::select(-motor_UPDRS, -subject, -total_UPDRS, -sex)
 
 pca_model <- prcomp(vars_pca, center=TRUE, scale=TRUE)
 
@@ -2217,7 +2401,10 @@ plot(cumsum(pca_model$sdev^2 / sum(pca_model$sdev^2)),
      main="Varianza explicada acumulada")
 abline(h=0.90, col="red", lty=2)
 ```
-Vemos que incluso para este caso para llegar al 90% de varianza explicada, necesitamos de 4 componentes principales
+
+Vemos que incluso para este caso para llegar al 90% de varianza
+explicada, necesitamos de 4 componentes principales
+
 ```{r}
 pca_train <- as.data.frame(pca_model$x[, 1:6])
 pca_train$motor_UPDRS <- train_final$motor_UPDRS
@@ -2238,6 +2425,7 @@ mape_pca <- mean(abs((test_final$motor_UPDRS - pred_pca) / test_final$motor_UPDR
 rmse_pca <- sqrt(mean((test_final$motor_UPDRS - pred_pca)^2))
 cat("RMSE:", rmse_pca, "\nMAPE:", mape_pca)
 ```
+
 Voy a eliminar PC6 dado que tiene un p-valor de 0.995, practicamente uno
 
 ```{r}
@@ -2252,9 +2440,9 @@ rmse_pca <- sqrt(mean((test_final$motor_UPDRS - pred_pca)^2))
 cat("RMSE:", rmse_pca, "\nMAPE:", mape_pca)
 ```
 
+Ya no vemos variables no significativas, vamos a sacar los gráficos para
+los supuestos
 
-
-Ya no vemos variables no significativas, vamos a sacar los gráficos para los supuestos
 ```{r}
 residuos_completo <- residuals(modelo_pca2)
 valores_ajustados_completo <- fitted(modelo_pca2)
@@ -2370,9 +2558,20 @@ library(gridExtra)
 grid.arrange(p1_completo, p2_completo, p3_completo, 
              p4_completo, p5_completo, p6_completo, ncol = 3)
 ```
-Igual que antes de la PCA, la violación evidente del supuesto de no autocorrelacción, la presencia de heterocedasticidad, las colas pesadas que dificultan la normalidad y no poder verificar la linealidad dada la forma de embudo que hace. Confirma que la inferencia con las herramientas que tenemos, es imposible. Queda sacar el modelo que mejor métricas tenga enfocandonos en predicción, que de por sí la PCA no mejora mucho esto.
 
-Y ya con esto podemos ver no es un problema de correlacción de variables, sino estructural. Dado el caracter de mediciones a lo largo del tiempo otorgándole una clara dependencia temporal que rompe los supuestos.
+Igual que antes de la PCA, la violación evidente del supuesto de no
+autocorrelacción, la presencia de heterocedasticidad, las colas pesadas
+que dificultan la normalidad y no poder verificar la linealidad dada la
+forma de embudo que hace. Confirma que la inferencia con las
+herramientas que tenemos, es imposible. Queda sacar el modelo que mejor
+métricas tenga enfocandonos en predicción, que de por sí la PCA no
+mejora mucho esto.
+
+Y ya con esto podemos ver no es un problema de correlacción de
+variables, sino estructural. Dado el caracter de mediciones a lo largo
+del tiempo otorgándole una clara dependencia temporal que rompe los
+supuestos.
+
 ```{r}
 
 ```
@@ -2384,6 +2583,7 @@ Y ya con esto podemos ver no es un problema de correlacción de variables, sino 
 ```{r}
 
 ```
+
 ------------------------------------------------------------------------
 
 ## Conclusiones y Trabajo a Futuro
