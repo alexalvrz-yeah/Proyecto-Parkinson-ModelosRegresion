@@ -898,264 +898,10 @@ correlaciones, pero tiene una información mutua menor.
 
 ## Aplicación del Modelo de Regresión
 
-hacer modelo con dfa y motor_updrs aquí.
-
-```{r}
-lmdfa <- lm(motor_UPDRS~dfa, data = train)
-summary(lmdfa)
-ggplot(train) + geom_point(aes(x = dfa, y =motor_UPDRS)) + geom_abline(intercept = 29.479, slope = -12.576, color = "red", lwd = 2)
-```
-
-el R\^2 es de 0.01, esta predicción apenas quita error(malísima). el
-estadístico F da 50, eso sí.
-
-hagámoslo con otro candidato, hnr
-
-```{r}
-lmhnr <- lm(motor_UPDRS~hnr, data = train)
-summary(lmhnr)
-ggplot(train) + geom_point(aes(x = hnr, y =motor_UPDRS)) + geom_abline(intercept = 27.94262, slope = -0.30651, color = "red", lwd = 2)
-```
-
-son un pelín mejores el R\^2 y la F
-
-con shimmer_apq11:
-
-```{r}
-lmsh11 <- lm(motor_UPDRS~shimmer_apq11, data = train)
-summary(lmsh11)
-ggplot(train) + geom_point(aes(x = shimmer_apq11, y =motor_UPDRS)) + geom_abline(intercept = 19.7994, slope = 54.0666, color = "red", lwd = 2)
-```
-
-le haría falta una transformación
-
-sería interesante hacerlo también con test_time para ver si hace un
-modelo que no sea extremadamente lamentable y mostrar que esta variable
-sería útil si los pacientes no se medicasen tampoco(?).
-
-```{r}
-lmtt <- lm(motor_UPDRS~test_time, data = train)
-summary(lmtt)
-ggplot(train) + geom_point(aes(x = test_time, y =motor_UPDRS)) + geom_abline(intercept = 20.290554, slope = 0.010494, color = "red", lwd = 2) 
-```
-
-nada, esta variable no serviría incluso si pudiesemos usarla.
-
-**usar transformación boxcox??** solamente si es necesario. parece que
-si será necesario. hagámoslo con dfa, y luego podríamos hacerlo con
-alguna variable que no fue escogida con el criterio del eda
-
-```{r}
-# boxcox y luego modelo
-bdfa <- boxcox(lm(train$dfa ~ 1))
-bdfa$x[which.max(bdfa$y)] # me pide hacerlo con -1.15
-
-newdfa <- (train$dfa ^ -0.666 - 1) / -0.666
-
-ggplot() + geom_point(aes(x = newdfa, y = train$motor_UPDRS))
-```
-
-forma una nube, no parece verse nada
-
-veamos uhm jitter_ddp
-
-```{r}
-bddp <- boxcox(lm(train$jitter_ddp ~ 1))
-bddp$x[which.max(bddp$y)] # me pide hacerlo con -0.424
-
-newddp <- (train$jitter_ddp ^ -0.303 - 1) / -0.303
-
-ggplot(train) + geom_point(aes(x = jitter_ddp, y = motor_UPDRS))
-ggplot() + geom_point(aes(x = newddp, y = train$motor_UPDRS))
-```
-
-cambia mucho todo pero no deja de ser una nube rara
-
-por último con shimmerapq11??
-
-```{r}
-bapq11 <- boxcox(lm(train$shimmer_apq11 ~ 1))
-bapq11$x[which.max(bapq11$y)] # me pide hacerlo con -0.222
-
-newapq11 <- (train$shimmer_apq11 ^ -0.141 - 1) / -0.141
-
-ggplot(train) + geom_point(aes(x = shimmer_apq11, y = motor_UPDRS))
-ggplot() + geom_point(aes(x = newapq11, y = train$motor_UPDRS))
-```
-
-la nube que forma es muy similar a la de la anterior new
-
-**luego hacer diagnóstico, ya que es obligatorio.** (indica que se han
-de hacer análisis de residuo)
-
-haremos diagnóstico del primero, el otro es malísimo
-
-```{r}
-# usamos la gráfica múltiple del libro
-# tenemos que cambiar estos valores
-
-# PRELIMINAR, CAMBIAR SI MODELO TRANSFORMADO ES MEJOR!!!
-
-residuos_completo <- residuals(lmhnr)
-valores_ajustados_completo <- fitted(lmhnr)
-residuos_std <- rstandard(lmhnr)
-leverage_vals <- hatvalues(lmhnr)
-
-leverage_vals <- hatvalues(lmhnr)
-residuos_stud <- rstudent(lmhnr)  # Residuos estudentizados
-cook_dist <- cooks.distance(lmhnr)
-
-datos_leverage <- data.frame(
-  leverage = leverage_vals,
-  residuos_stud = residuos_stud,
-  cook = cook_dist,
-  observacion = 1:length(leverage_vals)
-)
-
-# Calcular umbrales
-n <- nrow(train)
-k <- 1
-leverage_threshold <- 2 * (k + 1) / n
-cook_threshold <- 4 / (n - k - 1)
-
-# Función para crear curvas de Cook
-cook_curve <- function(leverage, cook_value, k) {
-  sqrt(cook_value * (k + 1) * (1 - leverage) / leverage)
-}
-
-# Crear curvas de Cook para diferentes valores
-lev_seq <- seq(0.001, max(leverage_vals) * 1.1, length.out = 100)
-cook_05 <- data.frame(
-  leverage = lev_seq,
-  pos = cook_curve(lev_seq, 0.5, k),
-  neg = -cook_curve(lev_seq, 0.5, k)
-)
-cook_1 <- data.frame(
-  leverage = lev_seq,
-  pos = cook_curve(lev_seq, 1, k),
-  neg = -cook_curve(lev_seq, 1, k)
-)
-
-
-# 1. Gráfico Residuos vs. Valores Ajustados
-p1_completo <- ggplot(data.frame(x = valores_ajustados_completo, y = residuos_completo), 
-                      aes(x = x, y = y)) +
-  geom_point(color = "darkred", alpha = 0.7) +
-  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
-  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
-  labs(title = "Residuos vs. Valores Ajustados", x = "Valores Ajustados", y = "Residuos") +
-  theme_classic(base_size = 10)
-
-# 2. Gráfico Q-Q Normal
-datos_qq_completo <- data.frame(residuos = residuos_std)
-
-p2_completo <- ggplot(datos_qq_completo, aes(sample = residuos)) +
-  geom_qq(color = "darkred", alpha = 0.7) +
-  geom_qq_line(color = "black", linetype = "dashed") +
-  labs(title = "Normal Q-Q Plot", x = "Cuantiles Teóricos", y = "Cuantiles de la Muestra") +
-  theme_classic(base_size = 10)
-
-# 3. Gráfico Scale-Location
-p3_completo <- ggplot(data.frame(x = valores_ajustados_completo, 
-                                 y = sqrt(abs(residuos_std))), 
-                      aes(x = x, y = y)) +
-  geom_point(color = "darkred", alpha = 0.7) +
-  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
-  labs(title = "Scale-Location", x = "Valores Ajustados", 
-       y = expression(sqrt("|Residuos Estandarizados|"))) +
-  theme_classic(base_size = 10)
-
-# 4. Gráfico Residuos vs. Leverage (con curvas de Cook)
-p4_completo <- ggplot(datos_leverage, aes(x = leverage, y = residuos_stud)) +
-  # Curvas de Cook
-  geom_line(data = cook_05, aes(x = leverage, y = pos), 
-            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
-  geom_line(data = cook_05, aes(x = leverage, y = neg), 
-            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
-  geom_line(data = cook_1, aes(x = leverage, y = pos), 
-            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
-  geom_line(data = cook_1, aes(x = leverage, y = neg), 
-            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
-  # Puntos de datos
-  geom_point(color = "darkred", alpha = 0.7, size = 1.5) +
-  # Líneas de referencia
-  geom_hline(yintercept = 0, color = "gray", linetype = "dashed") +
-  geom_hline(yintercept = c(-2, 2), color = "orange", linetype = "dotted", alpha = 0.7) +
-  geom_vline(xintercept = leverage_threshold, color = "purple", linetype = "dotted", alpha = 0.7) +
-  labs(title = "Residuals vs. Leverage", x = "Leverage", y = "Residuos Estudentizados") +
-  theme_classic(base_size = 10)
-
-# 5. Histograma de residuos
-p5_completo <- ggplot(data.frame(residuos = residuos_completo), aes(x = residuos)) +
-  geom_histogram(aes(y = after_stat(density)), bins = 15, fill = "red", 
-                 color = "black", alpha = 0.7) +
-  stat_function(fun = dnorm, 
-                args = list(mean = mean(residuos_completo), sd = sd(residuos_completo)),
-                color = "black", linewidth = 1) +
-  labs(title = "Histograma de Residuos", x = "Residuos", y = "Densidad") +
-  theme_classic(base_size = 10)
-
-# 6. Residuos vs. Orden
-p6_completo <- ggplot(data.frame(orden = 1:length(residuos_completo), 
-                                 residuos = residuos_completo), 
-                      aes(x = orden, y = residuos)) +
-  geom_point(color = "darkred", alpha = 0.7) +
-  geom_line(color = "darkred", alpha = 0.5) +
-  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
-  labs(title = "Residuos vs. Orden", x = "Orden de observación", y = "Residuos") +
-  theme_classic(base_size = 10)
-
-# Mostrar todos los gráficos en una rejilla 2x3
-library(gridExtra)
-grid.arrange(p1_completo, p2_completo, p3_completo, 
-             p4_completo, p5_completo, p6_completo, ncol = 3)
-```
-
-terrorífico
-
-residuos vs. ajustados falla al principio, la q-q plot es horrorosa en
-las colas, scale-location falla mucho al final, residuals vs. leverage
-muestra que todos los datos se pasan de la línea discontínua morada, el
-histograma de residuo es muy malo y los residuos vs. el orden dan un
-dato que se podía esperar, que cada sujeto tiene asociado un residuo,
-prácticamente.
-
-como encima sabemos, por mucho que no se pueda ver, que los residuos
-están correlacionados, podemos concluir que este modelo no cumple con
-NINGUNO!!! de los supuestos. waow.
-
-------------------------------------------------------------------------
-
-## Modelos no lineales y transformación de variables
-
-### PCA o Selección de Variables
-
-"super correladas has de quitarte, no hacer pca ya que preferirías
-mantener explicabilidad EXCEPTO si quiero predecir a fuego" "mantenerse
-consistente con el objetivo"
-
-Se tienen que quitar, con completa seguridad, `jitter_ddp` y
-`shimmer_dda`, al tener exactamente 1 de correlación con una variable
-previa.
-
-Teniendo en cuenta que en el [paper
-original](https://www.nature.com/articles/npre.2009.3920.1) mencionan
-que los pacientes no estuvieron medicados durante el estudio, y que los
-futuros pacientes en los que se aplicará el modelo podrían estarlo,
-`test_time` podría hacer que nuestras estimaciones empeoren. Encima, los
-datos futuros podrían no tener esta medida, así que por estas dos
-razones vamos a omitir la variable.
-
-*empiezas un modelo con todas, usando info vas quitando las menos útiles
-y llegas a un modelo, luego haces un modelo con backwards/stepwise, con
-etc y luego comparar con AIC, BIC, Cp de Mallows...*
-
-*te quedas con uno.* \## Regresión Simple
-
 Como hemos podido apreciar en el apartado final del EDA, una sola
 característica no tiene la potencia suficiente como para predecir la
-severidad del parkinson. Igual vamos a probar la regresión simple con la
-predictora mas explicativa a modo ilustrativo
+severidad del Parkinson. Igualmente, vamos a probar la regresión simple
+con la predictora más explicativa a modo ilustrativo.
 
 ```{r}
 regsimple <- lm(motor_UPDRS ~ dfa, data = train)
@@ -1188,7 +934,7 @@ cat("MAE:", round(mae_simple,2),"\n")
 cat("===============================\n")
 ```
 
-Por lo que vemos de error esperado podriamos estar tanto en el tercer,
+Por lo que vemos de error esperado podríamos estar tanto en el tercer,
 como primer cuartil, no es muy fiable esto obviamente. Hemos escogido
 estas métricas, dado que el MAE es el error promedio en absoluto,
 bastante interpretable en este caso, el RMSE dado que penaliza los
@@ -1311,15 +1057,206 @@ grid.arrange(p1_completo, p2_completo, p3_completo,
              p4_completo, p5_completo, p6_completo, ncol = 3)
 ```
 
-Vemos que en el QQ-Plot tiene unas colas muy pesadas y la
-autocorrelacción vemos es significativa, tiene sentido al tener
-observaciones de una misma persona a lo largo del tiempo. Así vemos no
-solo el modelo no tiene capacidad para predecir, sino que tampoco tiene
-base matemática ya que viola el supuesto de normalidad de residuos y el
-de autocorrelacción.
+Vemos que en el QQ-Plot tiene unas colas muy pesadas y, por mucho que no
+se vea, la autocorrelacción es significativa, lo cual es causado porque
+tenemos observaciones de una misma persona a lo largo del tiempo. Así
+vemos no solo el modelo no tiene capacidad para predecir, sino que
+tampoco tiene base matemática ya que viola el supuesto de normalidad de
+residuos y el de autocorrelacción.
 
 Este mismo problema de autocorrelacción se desarrollará ahora de cara a
-regresión múltiple, modelos no lineales y GLM's
+regresión múltiple, modelos no lineales y GLMs.
+
+Puede que una transformación haga que las cosas mejoren, vamos a probar
+primero con `dfa`:
+
+```{r}
+# boxcox y luego modelo
+bdfa <- boxcox(lm(train$dfa ~ 1))
+lambdadfa <- bdfa$x[which.max(bdfa$y)]
+
+newdfa <- (train$dfa ^ lambdadfa - 1) / lambdadfa
+
+ggplot() + geom_point(aes(x = newdfa, y = train$motor_UPDRS))
+```
+
+No parece haber cambiado mucho, tan solo se ha extendido un poco la
+nube.
+
+Una variable que va a cambiar mucho al ser transformada es
+`shimmer_apq11`, la cual era una de mejores variables según el EDA.
+Veamos cuánto cambia con la transformación, y luego haremos un modelo:
+
+```{r}
+bapq11 <- boxcox(lm(train$shimmer_apq11 ~ 1))
+lambdaapq11 <- bapq11$x[which.max(bapq11$y)]
+
+newapq11 <- (train$shimmer_apq11 ^ lambdaapq11 - 1) / lambdaapq11
+
+ggplot(train) + geom_point(aes(x = shimmer_apq11, y = motor_UPDRS))
+ggplot() + geom_point(aes(x = newapq11, y = train$motor_UPDRS))
+```
+
+Cambia bastante. Ahora veamos cómo queda el modelo:
+
+```{r}
+lmapq11 <- lm(train$motor_UPDRS~newapq11)
+summary(lmapq11)
+
+ggplot() + geom_point(aes(x = newapq11, y = train$motor_UPDRS)) + geom_abline(intercept = 27.9674, slope = 1.3293, color = "red", lwd = 2)
+```
+
+Técnicamente, según la R cuadrado y el estadístico F este modelo debería
+de ser mejor (ambos son más altos), pero aún así no parece ser nada
+bueno. Estudiemos los residuos:
+
+```{r}
+residuos_completo <- residuals(lmapq11)
+valores_ajustados_completo <- fitted(lmapq11)
+residuos_std <- rstandard(lmapq11)
+leverage_vals <- hatvalues(lmapq11)
+
+leverage_vals <- hatvalues(lmapq11)
+residuos_stud <- rstudent(lmapq11)  # Residuos estudentizados
+cook_dist <- cooks.distance(lmapq11)
+
+datos_leverage <- data.frame(
+  leverage = leverage_vals,
+  residuos_stud = residuos_stud,
+  cook = cook_dist,
+  observacion = 1:length(leverage_vals)
+)
+
+# Calcular umbrales
+n <- nrow(train)
+k <- 1
+leverage_threshold <- 2 * (k + 1) / n
+cook_threshold <- 4 / (n - k - 1)
+
+# Función para crear curvas de Cook
+cook_curve <- function(leverage, cook_value, k) {
+  sqrt(cook_value * (k + 1) * (1 - leverage) / leverage)
+}
+
+# Crear curvas de Cook para diferentes valores
+lev_seq <- seq(0.001, max(leverage_vals) * 1.1, length.out = 100)
+cook_05 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 0.5, k),
+  neg = -cook_curve(lev_seq, 0.5, k)
+)
+cook_1 <- data.frame(
+  leverage = lev_seq,
+  pos = cook_curve(lev_seq, 1, k),
+  neg = -cook_curve(lev_seq, 1, k)
+)
+
+
+# 1. Gráfico Residuos vs. Valores Ajustados
+p1_completo <- ggplot(data.frame(x = valores_ajustados_completo, y = residuos_completo), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Residuos vs. Valores Ajustados", x = "Valores Ajustados", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# 2. Gráfico Q-Q Normal
+datos_qq_completo <- data.frame(residuos = residuos_std)
+
+p2_completo <- ggplot(datos_qq_completo, aes(sample = residuos)) +
+  geom_qq(color = "darkred", alpha = 0.7) +
+  geom_qq_line(color = "black", linetype = "dashed") +
+  labs(title = "Normal Q-Q Plot", x = "Cuantiles Teóricos", y = "Cuantiles de la Muestra") +
+  theme_classic(base_size = 10)
+
+# 3. Gráfico Scale-Location
+p3_completo <- ggplot(data.frame(x = valores_ajustados_completo, 
+                                 y = sqrt(abs(residuos_std))), 
+                      aes(x = x, y = y)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8, formula = y ~ x) +
+  labs(title = "Scale-Location", x = "Valores Ajustados", 
+       y = expression(sqrt("|Residuos Estandarizados|"))) +
+  theme_classic(base_size = 10)
+
+# 4. Gráfico Residuos vs. Leverage (con curvas de Cook)
+p4_completo <- ggplot(datos_leverage, aes(x = leverage, y = residuos_stud)) +
+  # Curvas de Cook
+  geom_line(data = cook_05, aes(x = leverage, y = pos), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_05, aes(x = leverage, y = neg), 
+            color = "black", linetype = "dashed", alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = pos), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  geom_line(data = cook_1, aes(x = leverage, y = neg), 
+            color = "black", linetype = "solid", alpha = 0.8, inherit.aes = FALSE) +
+  # Puntos de datos
+  geom_point(color = "darkred", alpha = 0.7, size = 1.5) +
+  # Líneas de referencia
+  geom_hline(yintercept = 0, color = "gray", linetype = "dashed") +
+  geom_hline(yintercept = c(-2, 2), color = "orange", linetype = "dotted", alpha = 0.7) +
+  geom_vline(xintercept = leverage_threshold, color = "purple", linetype = "dotted", alpha = 0.7) +
+  labs(title = "Residuals vs. Leverage", x = "Leverage", y = "Residuos Estudentizados") +
+  theme_classic(base_size = 10)
+
+# 5. Histograma de residuos
+p5_completo <- ggplot(data.frame(residuos = residuos_completo), aes(x = residuos)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 15, fill = "red", 
+                 color = "black", alpha = 0.7) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuos_completo), sd = sd(residuos_completo)),
+                color = "black", linewidth = 1) +
+  labs(title = "Histograma de Residuos", x = "Residuos", y = "Densidad") +
+  theme_classic(base_size = 10)
+
+# 6. Residuos vs. Orden
+p6_completo <- ggplot(data.frame(orden = 1:length(residuos_completo), 
+                                 residuos = residuos_completo), 
+                      aes(x = orden, y = residuos)) +
+  geom_point(color = "darkred", alpha = 0.7) +
+  geom_line(color = "darkred", alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  labs(title = "Residuos vs. Orden", x = "Orden de observación", y = "Residuos") +
+  theme_classic(base_size = 10)
+
+# Mostrar todos los gráficos en una rejilla 2x3
+library(gridExtra)
+grid.arrange(p1_completo, p2_completo, p3_completo, 
+             p4_completo, p5_completo, p6_completo, ncol = 3)
+```
+
+Como era de esperar, no se cumplen los supuestos.
+
+------------------------------------------------------------------------
+
+## Modelos no lineales y transformación de variables
+
+### PCA o Selección de Variables
+
+"super correladas has de quitarte, no hacer pca ya que preferirías
+mantener explicabilidad EXCEPTO si quiero predecir a fuego" "mantenerse
+consistente con el objetivo"
+
+#### Variables que quitaremos con lo visto en la exploración
+
+Se tienen que quitar, con completa seguridad, `jitter_ddp` y
+`shimmer_dda`, al tener exactamente 1 de correlación con una variable
+previa.
+
+Teniendo en cuenta que en el [paper
+original](https://www.nature.com/articles/npre.2009.3920.1) mencionan
+que los pacientes no estuvieron medicados durante el estudio, y que los
+futuros pacientes en los que se aplicará el modelo podrían estarlo,
+`test_time` podría hacer que nuestras estimaciones empeoren. Encima, los
+datos futuros podrían no tener esta medida, así que por estas dos
+razones vamos a omitir la variable.
+
+*empiezas un modelo con todas, usando info vas quitando las menos útiles
+y llegas a un modelo, luego haces un modelo con backwards/stepwise, con
+etc y luego comparar con AIC, BIC, Cp de Mallows...*
+
+*te quedas con uno.*
 
 ## Regresión Múltiple y Modelos No Lineales
 
