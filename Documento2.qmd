@@ -243,7 +243,8 @@ sapply(train_final, function(x) sum(is.na(x)))
 train_na <- train_final                 
 train_na[train_na < 0] <- NA  # como no hay NA entonces puedo convertirlos y borrarlos
 
-train <- na.omit(train_na)
+train_na2 <- train_na[sample(nrow(train_na)),] #ordenamos al azar
+train <- na.omit(train_na2)
 head(sort(train$test_time)) # ya no hay valores negativos, solo ceros
 ```
 
@@ -252,7 +253,8 @@ sapply(test_final, function(x) sum(is.na(x)))
 test_na <- test_final                
 test_na[test_na < 0] <- NA  # como no hay NA entonces puedo convertirlos y borrarlos
 
-test <- na.omit(test_na)
+test_na2 <- test_na[sample(nrow(test_na)),] # ordenamos al azar
+test <- na.omit(test_na2)
 head(sort(test$test_time)) # ya no hay valores negativos, solo ceros
 ```
 
@@ -261,8 +263,10 @@ sapply(val_final, function(x) sum(is.na(x)))
 val_na <- val_final                 
 val_na[val_na < 0] <- NA  # como no hay NA entonces puedo convertirlos y borrarlos
 
-val <- na.omit(val_na)
+val_na2 <- val_na[sample(nrow(val_na)),] # ordenamos al azar
+val <- na.omit(val_na2)
 head(sort(val$test_time)) # ya no hay valores negativos, solo ceros
+# en este no aparecen ni ceros, jej
 ```
 
 A pesar de que a priori esto no debería de causar problemas, parece que
@@ -1169,11 +1173,11 @@ summary(regsimple)
 ```
 
 ```{r}
-predicciones_simple <- predict(regsimple, newdata = test_final)
+predicciones_simple <- predict(regsimple, newdata = test)
 
 # 2. Juntamos la realidad con lo que dijo el modelo
 resultados_simple <- data.frame(
-  real = test_final$motor_UPDRS,
+  real = test$motor_UPDRS,
   predicho = predicciones_simple
 )
 
@@ -1188,8 +1192,8 @@ mae_simple <- mean(abs(resultados_simple$real - resultados_simple$predicho), na.
 # --- EL VEREDICTO DEL MODELO SIMPLE ---
 cat("\n=== ERROR DEL MODELO SIMPLE ===\n")
 cat("RMSE:", round(rmse_simple, 4), "puntos UPDRS\n")
-cat("La media de UPDRS es : ",mean(test_final$motor_UPDRS),"puntos UPDRS\n")
-cat("Siendo los cuartiles (al principio min y al final el max) : ",summary(test_final$motor_UPDRS),"\n")
+cat("La media de UPDRS es : ",mean(test$motor_UPDRS),"puntos UPDRS\n")
+cat("Siendo los cuartiles (al principio min y al final el max) : ",summary(test$motor_UPDRS),"\n")
 cat("MAE:", round(mae_simple,2),"\n")
 cat("===============================\n")
 ```
@@ -1336,10 +1340,10 @@ variables de forma progresiva, este primer modelo va a doler a los ojos
 mirarlo, se avisa de antemano
 
 ```{r}
-train_selection <- train_final %>%
+train_selection <- train %>%
   dplyr::select(-subject, -test_time, -total_UPDRS) # Escribe los nombres exactos de tus columnas aquí
 
-test_selection <- test_final %>%
+test_selection <- test %>%
  dplyr:: select(-subject, -test_time, -total_UPDRS)
 ```
 
@@ -1398,7 +1402,7 @@ print(sort(vif_step, decreasing = TRUE))
 
 # 4. MÉTRICAS DE ERROR EN TEST
 pred_step <- predict(modelo_stepwise, newdata = test_selection)
-resultados_step <- data.frame(real = test_final$total_UPDRS, pred = pred_step)
+resultados_step <- data.frame(real = test$total_UPDRS, pred = pred_step)
 
 rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
 mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
@@ -1611,7 +1615,7 @@ Vamos a tomar medidas de rendimiento
 
 ```{r}
 pred_mult <- predict(modmult6, newdata = test_selection)
-resultados_step <- data.frame(real = test_final$motor_UPDRS, pred = pred_step)
+resultados_step <- data.frame(real = test$motor_UPDRS, pred = pred_step)
 
 rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
 mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
@@ -1670,7 +1674,7 @@ Vale,el VIF da muy alto, voy a eliminar la relación.
 
 ```{r}
 pred_mult <- predict(modmult9, newdata = test_selection)
-resultados_step <- data.frame(real = test_final$motor_UPDRS, pred = pred_step)
+resultados_step <- data.frame(real = test$motor_UPDRS, pred = pred_step)
 
 rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
 mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
@@ -2269,11 +2273,12 @@ cuando pasa a ser mas grave, etc). con el total y así cambiamos.
 no parece haber un punto en el que empeoren más los pacientes.
 
 ```{r}
-train_final$sex <- as.factor(train_final$sex)
-test_final$sex  <- as.factor(test_final$sex)
+train$sex <- as.factor(train$sex)
+test$sex  <- as.factor(test$sex)
+val$sex <- as.factor(val$sex)
 
 # 1. EL ENTRENAMIENTO (La hora de la verdad)
-# Usamos train_final y le metemos curvas (s) a todas las continuas
+# Usamos train y le metemos curvas (s) a todas las continuas
 modelo_gamma_final <- gam(
   total_UPDRS ~ s(hnr) + 
                 s(dfa) + 
@@ -2281,7 +2286,7 @@ modelo_gamma_final <- gam(
                 s(age) + 
                 sex, 
   family = Gamma(link = "log"), 
-  data = train_final, 
+  data = train, 
   method = "REML"
 )
 
@@ -2290,11 +2295,11 @@ summary(modelo_gamma_final)
 
 # 2. PREDICCIONES EN DATOS NUEVOS (TEST)
 # type = "response" es vital para deshacer el logaritmo de la familia Gamma
-predicciones <- predict(modelo_gamma_final, newdata = test_final, type = "response")
+predicciones <- predict(modelo_gamma_final, newdata = test, type = "response")
 
 # 3. CÁLCULO DE MÉTRICAS
 resultados <- data.frame(
-  real = test_final$total_UPDRS,  # Asegúrate de que esta es la variable que predices
+  real = test$total_UPDRS,  # Asegúrate de que esta es la variable que predices
   predicho = as.numeric(predicciones)
 )
 
@@ -2337,7 +2342,7 @@ gam.check(modelo_gamma_final)
 ```{r}
 # Supongamos que quieres evaluar sobre tu mismo dataset 'train'
 # o si tienes uno de prueba llamado 'test'
-predicciones <- predict(modelo_gamma, newdata = test, type = "response")
+predicciones <- predict(modelo_gamma_final, newdata = test, type = "response")
 
 # Creamos un dataframe auxiliar para comparar
 resultados <- data.frame(
@@ -2387,7 +2392,7 @@ en verdad no serla.
 ## Último Intento : PCA
 
 ```{r}
-vars_pca <- train_final %>% 
+vars_pca <- train %>% 
   dplyr::select(-motor_UPDRS, -subject, -total_UPDRS, -sex)
 
 pca_model <- prcomp(vars_pca, center=TRUE, scale=TRUE)
@@ -2407,11 +2412,11 @@ explicada, necesitamos de 4 componentes principales
 
 ```{r}
 pca_train <- as.data.frame(pca_model$x[, 1:6])
-pca_train$motor_UPDRS <- train_final$motor_UPDRS
+pca_train$motor_UPDRS <- train$motor_UPDRS
 
 pca_test <- as.data.frame(predict(pca_model, 
-  dplyr::select(test_final, -motor_UPDRS, -subject, -total_UPDRS))[, 1:6])
-pca_test$motor_UPDRS <- test_final$motor_UPDRS
+  dplyr::select(test, -motor_UPDRS, -subject, -total_UPDRS))[, 1:6])
+pca_test$motor_UPDRS <- test$motor_UPDRS
 ```
 
 ```{r}
@@ -2421,8 +2426,8 @@ summary(modelo_pca)
 
 ```{r}
 pred_pca <- predict(modelo_pca, newdata=pca_test)
-mape_pca <- mean(abs((test_final$motor_UPDRS - pred_pca) / test_final$motor_UPDRS)) * 100
-rmse_pca <- sqrt(mean((test_final$motor_UPDRS - pred_pca)^2))
+mape_pca <- mean(abs((test$motor_UPDRS - pred_pca) / test$motor_UPDRS)) * 100
+rmse_pca <- sqrt(mean((test$motor_UPDRS - pred_pca)^2))
 cat("RMSE:", rmse_pca, "\nMAPE:", mape_pca)
 ```
 
@@ -2435,8 +2440,8 @@ summary(modelo_pca2)
 
 ```{r}
 pred_pca <- predict(modelo_pca2, newdata=pca_test)
-mape_pca <- mean(abs((test_final$motor_UPDRS - pred_pca) / test_final$motor_UPDRS)) * 100
-rmse_pca <- sqrt(mean((test_final$motor_UPDRS - pred_pca)^2))
+mape_pca <- mean(abs((test$motor_UPDRS - pred_pca) / test$motor_UPDRS)) * 100
+rmse_pca <- sqrt(mean((test$motor_UPDRS - pred_pca)^2))
 cat("RMSE:", rmse_pca, "\nMAPE:", mape_pca)
 ```
 
