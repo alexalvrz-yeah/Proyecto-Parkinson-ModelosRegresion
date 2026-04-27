@@ -36,7 +36,7 @@ de 6 centros médicos. Hay alrededor de `200` mediciones de cada
 paciente, para un total de `5875` mediciones. Específicamente, lo que se
 hace en cada medición es guardar datos de la voz de los pacientes.
 
-El objetivo principal de los datos es poder predecir `motor_UPDRS` y
+El objetivo principal de los datos es poder predecir `motor_UPDRS` o
 `total_UDPRS` a partir de las otras `16` variables. Hay un total de `19`
 variables, teniendo en cuenta que una de ellas es la ID del paciente.
 
@@ -106,12 +106,9 @@ cuál es la diferencia entre las variables).
 
 ### Partición de Datos
 
-Después de limpiarlos, habrá que cortarlos (usando este código adaptado
-a nuestro dataset). En este caso, no vamos a hacer una partición
-aleatoria directamente, vamos a escoger ciertos subjects para cada una
-de las particiones.
-
-Lo cambio pq da caca en los modelos, voy a estratificar por cuartiles
+Vamos a hacer las particiones, en las cuales vamos a escoger por
+cuartiles para evitar que entre partición y partición no se parezcan
+nada:
 
 ```{r}
 set.seed(123)
@@ -164,9 +161,6 @@ gráfica de Residuos vs. Orden que se seguía un patrón.
 
 ![](images/clipboard-3217712914.png)
 
-Esto significa que los modelos, por fuerza, iban a romper el supuesto de
-independencia, tal y como se muestra en la imagen, siempre.
-
 El código de la antigua partición es el siguiente (comentado, ya que no
 nos interesan los resultados):
 
@@ -208,7 +202,8 @@ nos interesan los resultados):
 ```
 
 Además, se han de mezclar los resultados de la partición para que así no
-queden los residuos de esta forma:
+queden los residuos de esta forma. Vamos a hacerlo en la siguiente
+sección.
 
 ![](images/clipboard-1575656904.png)
 
@@ -229,14 +224,16 @@ sexo, etcétera....)
 train_final %>% count(subject, sex, age, sort=TRUE)
 ```
 
-Se puede ver que no hay nada extraño, no hay ningún caso en el cual haya
-un paciente que haya sido marcado con dos sexos. Además, son siempre
-marcados con la misma edad (es improbable que ninguno haya cumplido años
-durante la duración de las pruebas, pero bueno).
+Hay 42 filas, mismo número que el de sujetos. Se puede ver que no hay
+nada extraño, no hay ningún caso en el cual haya un paciente que haya
+sido marcado con dos sexos. Además, son siempre marcados con la misma
+edad (es improbable que ninguno haya cumplido años durante la duración
+de las pruebas, pero bueno).
 
 `test_time` tiene valores negativos. Además. es la única variable con
-valores negativos del dataset. Teniendo en cuenta lo que significa,
-vamos a quitarlos (no tiene sentido que haya)
+valores negativos del dataset. Teniendo en cuenta lo que esta variable
+significa, vamos a quitarlos (y ya de paso mezclamos durante el proceso
+los datos).
 
 ```{r}
 sapply(train_final, function(x) sum(is.na(x)))
@@ -269,17 +266,13 @@ head(sort(val$test_time)) # ya no hay valores negativos, solo ceros
 # en este no aparecen ni ceros, jej
 ```
 
-A pesar de que a priori esto no debería de causar problemas, parece que
-en algunos puntos del dataset la variable `test_time` no va en orden
-mayor a menor. Eso sí, `subject` sí es consistente.
-
 ------------------------------------------------------------------------
 
 ## Exploración de Datos
 
 Para explorar todo al mismo tiempo, usaremos muchos histogramas al mismo
 tiempo. No haremos histogramas del sexo, la ID y la edad porque no es
-lógico hacerlo. Eso sí, se explorarán el sexo y la edad más tarde.
+lógico hacerlo. Eso sí, se explorarán el sexo y la edad más adelante.
 
 ```{r message=FALSE, fig.height=30, fig.width=8}
 
@@ -437,7 +430,7 @@ variables: los `jitter*` y los `shimmer*`. Cada uno de los integrantes
 del grupo es muy similar al resto, a excepción de `jitter_abs`. Vamos a
 actuar como si los grupos fuesen una sola variable, y si algo raro es
 visible en alguna de las variables se mencionará ahí. Se explorará como
-si fuese un grupo también las dos variables de `*_UPDRS`. Ya `nhr` y
+si fuese un grupo también las dos variables de `*_UPDRS`. Ya que `nhr` y
 `hnr` aparecen juntas en la tabla de descripción de variables, también
 las juntaré aquí.
 
@@ -463,25 +456,19 @@ ggplot(data = train, mapping = aes(x = .data[["test_time"]])) + #datos
   geom_vline(xintercept = media_test_time, color = "red", linetype = "dashed", linewidth = 1) + #línea roja
   labs(title = "Distribución de test_time", x = "Cantidad de días", y = "Frecuencia" ) + #leyenda
   theme_minimal() #tema
-
-head(train$test_time)
 ```
 
 Se puede ver que el hueco sigue existiendo. Esto puede ser causado por
 algo de la vida real. Al caer la línea en el hueco, se podría suponer
 que algunos pacientes devolvieron temporalmente el medidor a petición
 del médico, para guardar los datos ya medidos, por ejemplo. También
-podemos ver con esto que no todos los días se toman mediciones. En el
-caso de lo que se muestra con el head(), podemos ver que se hace una
-medición una vez a la semana. Sin embargo, como se puede ver en el tramo
-de limpieza de datos, todos los sujetos dan más de 100 mediciones a lo
-largo de los más o menos 200 días del experimento, así que el ritmo real
-es más de una vez cada dos días.
+podemos ver con esto que no todos los días se toman mediciones.
 
-Otro dato interesante, visto con el head() es que los días no son
-medidos con enteros, son valores contínuos. En la página web no indica
-qué significan los valores decimales, tan sólo dice que la parte entera
-son los días desde que comenzaron las pruebas.
+Una de las conclusiones que sacamos antes de cambiar la partición fue
+que los pacientes hacían con un orden bastante irregular las mediciones
+(un sujeto medía al principio una vez a la semana, luego empezó a
+acelerar el ritmo de mediciones). Eso sí, todos los sujetos tenían
+asociados unas más de 100 mediciones igualmente.
 
 En conclusión, era de esperar que no fuese una variable uniforme exacta
 gracias a que no todos los pacientes entregaron la misma cantidad de
@@ -528,20 +515,17 @@ motores (es lo que indica el ratio) y la diferencia nos indica que no
 suele aumentar lo mismo el total, por lo tanto estas dos variables no
 tienen una correlación enorme.
 
-Destaca en el histograma de `updrs_diff` lo que parece un solo paciente
-que consistentemente tiene diferencias cercanas a 20.
-
-Ese paciente es el `subject` 25, el cual tiene el tercer `motor_UPDRS`
-más alto de toda la partición (en cierto momento, y comparado con otros
-sujetos). Los dos sujetos que llegan a tener un valor más alto que él
-son 37 y 39, los cuales poseen una `updrs_diff` cercana a 10 durante el
-tiempo en el cual tienen el `motor_UPDRS` más alto. A pesar de que su
-`motor_UPDRS` es más bajo en algunos momentos, la diferencia suele
-rondar los 20 puntos.
+Con la anterior partición investigamos a un sujeto (25) el cual tenía
+constantemente un `updrs_diff` de 20, muy separado del resto y sin
+entregar indicios de por qué tenía un valor tan elevado en comparación a
+otros sujetos que tienen un `motor_UPDRS` similar.
 
 Usando este sujeto como ejemplo, podemos confirmar que escogeremos
 `motor_UPDRS` como variable a predecir, ya que `total_UPDRS` es menos
 predecible gracias a la posibilidad de que existan más sujetos como él.
+También se puede usar como argumento el segundo histograma, que ocupa un
+rango enorme (de más o menos 0.4 hasta casi 1, sin que podamos saber qué
+lo causa con nuestros datos).
 
 Veamos la correlación entre ambos valores, simplemente para ver cómo de
 elevada es:
@@ -684,10 +668,10 @@ Veamos la correlación entre las dos:
 cor(scale(train[ ,18:19]))[2]
 ```
 
-A pesar de que estén muy relacionadas por nombre (noise-to-harmonics y
-harmonics-to-noise), la correlación inversa no es tan fuerte como la de
-las variables de arriba. Son también distintas en los valores: `nhr`
-está entre 0 y 0.75 y `hnr` está entre \~1 y \~35.
+A pesar de que estén muy relacionadas por sus nombres
+(noise-to-harmonics y harmonics-to-noise), la correlación inversa no es
+tan fuerte como la de las variables de arriba. Son también distintas en
+los valores: `nhr` está entre 0 y 0.75 y `hnr` está entre \~1 y \~35.
 
 ### rpde
 
@@ -704,10 +688,8 @@ ser normal, así que vamos a hacer un test para comprobarlo:
 lillie.test(train$rpde)
 ```
 
-No lo es, ni de cerca. Por mucho que los valores sean bastante cercanos
-a 0, no es normal debido a que la forma es bastante extraña.
-
-**PREGUNTAR ACERCA DE ESTO!!!**
+No lo es. Por mucho que los valores sean bastante cercanos a 0, no es
+normal debido a que la forma es bastante extraña.
 
 ### dfa
 
@@ -723,9 +705,23 @@ ggplot(data = train, mapping = aes(x = .data[["dfa"]])) + #datos
   theme_minimal() #tema
 ```
 
-No llega a haber completamente una segunda montaña. Al igual que la
-variable anterior y en la siguiente, tiene una cola con muy pocas
-observaciones en la derecha.
+Se puede ver aquí también el valle entre las dos concentraciones de
+valores.
+
+Hay un (o un par) valor atípico que también aparecía en el anterior
+histograma. Vamos a ver cuál es, para investigarlo:
+
+```{r}
+# desde View() se puede comprobar que es la observación nº1234 (jej)
+print(train[1234,])
+print(train[1234, 14:22]) # para mostrar las variables que faltan
+```
+
+Es solamente uno. Curiosamente, a pesar de que otras observaciones con
+valores altos en `dfa` no tienen un `ppe` muy extraño, esta tiene
+también el `ppe` más alto de la partición. En general, los otros valores
+son bastante elevados, así que podemos descartar la idea de que esta
+observación es un una medición incorrecta.
 
 ### ppe
 
@@ -751,65 +747,57 @@ df_edades <- data.frame(edades)
 ```
 
 Son pocos sujetos, por lo tanto una pirámide poblacional no quedará
-bien. Vamos a probar a hacer un gráfico de abeja:
+bien. Vamos a probar a hacer un gráfico de enjambre:
 
 ```{r}
-# gráfico de abeja
+# gráfico de enjambre
 ggplot(df_edades, aes(y=age, x='')) +
   geom_beeswarm()
 ```
 
 Podemos ver dos grandes atípicos: alguien mayor de 80 años y alguien
-menor de 40. Las demás observaciones están entre \~75 y \~50.
+menor de 40. Las demás observaciones están entre \~75 y \~50, y hay
+varias edades que están repetidas.
 
 ### sex
 
 El sexo de los pacientes según la página web es 28 hombres y 14 mujeres.
-Conocer esto es "hacer trampa" ya que no deberíamos de saberlo (no
-deberíamos de saber nada acerca de test y validation), pero bueno.
 
 ```{r}
 # fabricando un dataset nuevo para que me resulte más cómodo
-# los números vienen de la tabla count de la sección de limpieza de datos
 df <- data.frame(
   sexo = c("0", "1"), 
-  y = c(19, 11)
+  y = c(28, 14)
 )
-ggplot(df, aes(sexo, y, fill=sexo)) + labs(sexo = NULL, y = NULL) + geom_bar(stat = "identity") + scale_fill_manual(values=c("blue","pink")) + ggtitle("Sexo de los pacientes") 
+ggplot(df, aes(sexo, y, fill=sexo)) + labs(sexo = NULL, y = NULL) + geom_bar(stat = "identity") + scale_fill_manual(values=c("blue","pink")) + ggtitle("Sexo de los pacientes")
 ```
-
-Hay 19 hombres y 11 mujeres, cosa que sabemos gracias al código que
-hicimos en la sección de limpieza de datos. Esto significa que puede que
-nuestro modelo esté sesgado después si los síntomas o mediciones son
-distintos entre hombres y mujeres, al ser el ratio distinto entre train
-y las otras particiones/el dataset completo.
 
 Según [este paper](https://pmc.ncbi.nlm.nih.gov/articles/PMC11885646/),
 el riesgo de Parkinson es 1.5 veces mayor en hombres, haciendo así que
-nuestro subdataset `train` represente algo mejor la población general
-que todo el dataset. Esto puede causar sesgo.
+la población general afectada por el Parkinson no se vea representada
+correctamente. Si nuestro modelo fuese implementado en la vida real,
+tendría sesgo.
 
 ### Relación de las variables explicativas con la objetivo
 
 En esta sección se creará una tabla en la cual se mostrarán datos acerca
 de la relación de las variables con `motor_UPDRS`, debido a que de
-momento no hemos preguntado cuál de las variables es la que más nos
+momento no nos hemos preguntado cuál de las variables es la que más nos
 sirve para poder predecirlo.
 
 No vamos a usar las siguientes variables, ya que no tendría sentido:
 `test_time`, `total_UPDRS`, `age` y `sex`.
 
 El razonamiento detrás de la exclusión de `test_time` está escrito más
-abajo, en la sección de [PCA o Selección de Variables].
+abajo, en la sección de [PCA o Selección de Variables]. `total_UPDRS` es
+excluida porque no la tendremos a la hora de predecir. `sex` y `age` son
+excluidas porque causarían sobreajuste (`age` predice perfectamente al
+sujeto de 36 años porque sabe quién es con la edad, sería como predecir
+con `subject`, `sex` haría algo similar pero entre los dos sexos).
 
 ```{r}
 # esto se hará creando un dataframe e imprimiéndolo
-# pearson, spearman, info mutua
-# para estandarizar usar escalado robusto
-# transformación inversa?? no hay ningún 0
-# cor(method = "pearson")
-# cor(method = "spearman")
-# mutinformation("los dos valores que quiero mirar")
+# pearson, spearman, info mutua e info mutua / entropía
 
 # vector de pearson, al ser default no lo especifico
 v_pearson <- c(cor(x = train$jitter_pct, y = train$motor_UPDRS),
@@ -873,7 +861,8 @@ v_nmi <- v_mutinfo / entropia_target
 
 
 nombres <- c("jitter_pct", "jitter_abs", "jitter_rap", "jitter_ppq5", "jitter_ddp",
-             "shimmer", "shimmer_db", "shimmer_apq3", "shimmer_apq5", "shimmer_apq11", "shimmer_dda","nhr", "hnr", "rpde", "dfa", "ppe")
+             "shimmer", "shimmer_db", "shimmer_apq3", "shimmer_apq5",
+             "shimmer_apq11", "shimmer_dda","nhr", "hnr", "rpde", "dfa", "ppe")
 
 # dataframe para imprimirlo como tabla
 df <- data.frame(v_pearson, v_spearman, v_mutinfo,v_nmi, row.names = nombres)
@@ -882,12 +871,13 @@ df[order(df$v_mutinfo, decreasing = TRUE), ]
 
 Parece que las cuatro métricas de la tabla coinciden: una sola variable
 no es suficiente para poder predecir. Necesitamos varias de ellas juntas
-para obtener un buen resultado
+para obtener un buen resultado.
 
-Si se tuviese que escoger una de las tres, la mejor candidata es `hnr`,
-ya que tiene los valores más altos. `rpde` se le acerca, pero tiene una
-información mutua menor. `dfa` tiene los tres valores solo un poco más
-bajos que `hnr`.
+Si se tuviese que escoger una de las tres, la mejor candidata es `dfa`,
+ya que tiene la información mutua más alta. `hnr` tiene mejores
+correlaciones, pero tiene una información mutua menor.
+`shimmer_apq11`tiene los tres valores solo un poco más bajos que `hnr`
+(y tiene correlación directa).
 
 ### Conclusiones del EDA
 
@@ -896,7 +886,7 @@ bajos que `hnr`.
   predecible con lo que tenemos.
 - `jitter*` y `shimmer*` forman dos grupos con correlación alta y
   distribuciones similares, en ambos hay una variable que es redundante
-  y `jitter_abs` es un "perro verde".
+  (dos con correlación 1) y `jitter_abs` es distinta a todas.
 - Hay varias edades repetidas y solo existen dos atípicos (36 y 85).
 - El ratio de sexo de nuestros pacientes es distinto al de la población
   general (más hombres, puede que cause sesgo).
@@ -908,51 +898,48 @@ bajos que `hnr`.
 
 ## Aplicación del Modelo de Regresión
 
-hacer modelo con hnr y motor_updrs aquí.
-
-```{r}
-lmhnr <- lm(motor_UPDRS~hnr, data = train)
-summary(lmhnr)
-ggplot(train) + geom_point(aes(x = hnr, y =motor_UPDRS)) + geom_abline(intercept = 24.67633, slope = -0.16975, color = "red", lwd = 2)
-```
-
-el R\^2 es de 0.01, esta predicción apenas quita error(malísima). el
-estadístico F da un número bastante alto, eso sí.
-
-hagámoslo con el otro candidato, rpde
-
-```{r}
-lmrpde <- lm(motor_UPDRS~rpde, data = train)
-summary(lmrpde)
-ggplot(train) + geom_point(aes(x = rpde, y =motor_UPDRS)) + geom_abline(intercept = 16.7715, slope = 7.7048, color = "red", lwd = 2)
-```
-
-son un pelín mejores el R\^2 y la F
-
-con dfa:
+hacer modelo con dfa y motor_updrs aquí.
 
 ```{r}
 lmdfa <- lm(motor_UPDRS~dfa, data = train)
 summary(lmdfa)
-ggplot(train) + geom_point(aes(x = dfa, y =motor_UPDRS)) + geom_abline(intercept = 27.4523, slope = -9.8993, color = "red", lwd = 2)
+ggplot(train) + geom_point(aes(x = dfa, y =motor_UPDRS)) + geom_abline(intercept = 29.479, slope = -12.576, color = "red", lwd = 2)
 ```
 
-este es peor con las dos métricas anteriormente mencionadas. mis ojos
+el R\^2 es de 0.01, esta predicción apenas quita error(malísima). el
+estadístico F da 50, eso sí.
 
-sería interesante hacerlo también con test_time para hacer un modelo que
-no sea extremadamente lamentable y mostrar que esta variable sería útil
-si los pacientes no se medicasen tampoco(?).
+hagámoslo con otro candidato, hnr
+
+```{r}
+lmhnr <- lm(motor_UPDRS~hnr, data = train)
+summary(lmhnr)
+ggplot(train) + geom_point(aes(x = hnr, y =motor_UPDRS)) + geom_abline(intercept = 27.94262, slope = -0.30651, color = "red", lwd = 2)
+```
+
+son un pelín mejores el R\^2 y la F
+
+con shimmer_apq11:
+
+```{r}
+lmsh11 <- lm(motor_UPDRS~shimmer_apq11, data = train)
+summary(lmsh11)
+ggplot(train) + geom_point(aes(x = shimmer_apq11, y =motor_UPDRS)) + geom_abline(intercept = 19.7994, slope = 54.0666, color = "red", lwd = 2)
+```
+
+le haría falta una transformación
+
+sería interesante hacerlo también con test_time para ver si hace un
+modelo que no sea extremadamente lamentable y mostrar que esta variable
+sería útil si los pacientes no se medicasen tampoco(?).
 
 ```{r}
 lmtt <- lm(motor_UPDRS~test_time, data = train)
 summary(lmtt)
-ggplot(train) + geom_point(aes(x = test_time, y =motor_UPDRS)) + geom_abline(intercept = 20.839651, slope = -0.002112, color = "red", lwd = 2) 
+ggplot(train) + geom_point(aes(x = test_time, y =motor_UPDRS)) + geom_abline(intercept = 20.290554, slope = 0.010494, color = "red", lwd = 2) 
 ```
 
-guau, es incluso peor (p-valor de test_time alto), estadístico F con
-p-valor demasiado alto también y un R\^2 mucho peor que el anterior
-también, el coeficiente aquí es 0 de hecho, no tiene relacion lineal con
-el target, tambien tiene sentido.
+nada, esta variable no serviría incluso si pudiesemos usarla.
 
 **usar transformación boxcox??** solamente si es necesario. parece que
 si será necesario. hagámoslo con dfa, y luego podríamos hacerlo con
@@ -968,7 +955,7 @@ newdfa <- (train$dfa ^ -0.666 - 1) / -0.666
 ggplot() + geom_point(aes(x = newdfa, y = train$motor_UPDRS))
 ```
 
-no parece haber hecho nada en este caso, tengo que mirarlo bien
+forma una nube, no parece verse nada
 
 veamos uhm jitter_ddp
 
@@ -982,7 +969,7 @@ ggplot(train) + geom_point(aes(x = jitter_ddp, y = motor_UPDRS))
 ggplot() + geom_point(aes(x = newddp, y = train$motor_UPDRS))
 ```
 
-en este caso sí que hace algo bastante más notable
+cambia mucho todo pero no deja de ser una nube rara
 
 por último con shimmerapq11??
 
@@ -996,8 +983,7 @@ ggplot(train) + geom_point(aes(x = shimmer_apq11, y = motor_UPDRS))
 ggplot() + geom_point(aes(x = newapq11, y = train$motor_UPDRS))
 ```
 
-después de la transformación podemos ver que tienen una forma muy
-parecida la anterior "new" y esta, curioso
+la nube que forma es muy similar a la de la anterior new
 
 **luego hacer diagnóstico, ya que es obligatorio.** (indica que se han
 de hacer análisis de residuo)
@@ -1133,6 +1119,10 @@ muestra que todos los datos se pasan de la línea discontínua morada, el
 histograma de residuo es muy malo y los residuos vs. el orden dan un
 dato que se podía esperar, que cada sujeto tiene asociado un residuo,
 prácticamente.
+
+como encima sabemos, por mucho que no se pueda ver, que los residuos
+están correlacionados, podemos concluir que este modelo no cumple con
+NINGUNO!!! de los supuestos. waow.
 
 ------------------------------------------------------------------------
 
