@@ -2355,3 +2355,23 @@ extremadamente malos y se tendría que hacer otro tipo de modelo.
 
 -   Si los hubíesemos visto, habríamos utilizado un modelo mixto (que
     habría dado un mejor resultado).
+
+------------------------------------------------------------------------
+
+## Memoria
+
+La parte que ha hecho cada integrante del grupo, y el número de este.
+
+Alejandro Álvarez Segoviano: El GitHub del proyecto, contribuciones
+varias en las primeras secciones, la mitad de la aplicación del modelo
+de regresión lineal simple, modelos no lineales y transformación de
+variables, modelo gamma, sección en la que se aplica la PCA, y mucha
+ayuda en la teoría aplicada del trabajo.
+
+Ivo Reguero Ferrer: Introducción, lectura y descripción de datos,
+preparación de datos, exploración de datos, la mitad de la aplicación
+del modelo de regresión lineal simple, modelo de regresión logística,
+comparación y evaluación de modelos y conclusiones, además de revisión
+de faltas de ortografía.
+
+Número de grupo: 14.
