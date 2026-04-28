@@ -155,8 +155,8 @@ cat("Val:  ", nrow(val_final), "filas\n")
 
 #### Por qué no estamos haciendo la partición con los sujetos
 
-Antes de llegar a la sección de [Modelos no lineales y transformación de
-variables], se decidió cambiar la partición a esta, siendo que antes
+Antes de llegar a la sección de [Modelos no Lineales y Transformación de
+Variables], se decidió cambiar la partición a esta, siendo que antes
 usábamos una partición que escogía sujetos. El motivo por el cuál hemos
 cambiado es simple: las particiones tenían un parecido bajísimo (entre
 train, test y val) y, al no estar mezclados los datos se podía ver en la
@@ -784,7 +784,7 @@ la población general afectada por el Parkinson no se vea representada
 correctamente. Si nuestro modelo fuese implementado en la vida real,
 tendría sesgo.
 
-### Relación de las variables explicativas con la objetivo
+### Relación de las Variables Explicativas con la Objetivo
 
 En esta sección se creará una tabla en la cual se mostrarán datos acerca
 de la relación de las variables con `motor_UPDRS`, debido a que de
@@ -912,7 +912,7 @@ a que los supuestos no se van a cumplir casi siempre no se van a seguir
 estudiando los gráficos o añadiendo más, lógicamente, para evitar perder
 el tiempo.
 
-### Regresión lineal simple directamente
+### Regresión Lineal Simple Directamente
 
 Como hemos podido apreciar en el apartado final del EDA, una sola
 característica no tiene la potencia suficiente como para predecir la
@@ -948,6 +948,7 @@ cat("RMSE:", round(rmse_simple, 4), "puntos UPDRS\n")
 cat("La media de UPDRS es : ",mean(test$motor_UPDRS),"puntos UPDRS\n")
 cat("Siendo los cuartiles (al principio min y al final el max) : ",summary(test$motor_UPDRS),"\n")
 cat("MAE:", round(mae_simple,2),"\n")
+cat("MAPE:", round(mape_simple,2),"\n")
 ```
 
 Por lo que vemos de error esperado podríamos estar tanto en el tercer,
@@ -1083,7 +1084,7 @@ residuos y el de autocorrelacción.
 Este mismo problema de autocorrelacción se desarrollará ahora de cara a
 regresión múltiple, modelos no lineales y GLMs.
 
-### Regresión lineal simple con transformación antes
+### Regresión Lineal Simple con Transformación Previa
 
 Puede que una transformación haga que las cosas mejoren, vamos a probar
 primero con `dfa`:
@@ -1249,9 +1250,9 @@ Como era de esperar, no se cumplen los supuestos.
 
 ------------------------------------------------------------------------
 
-## Modelos no lineales y transformación de variables
+## Modelos no Lineales y Transformación de Variables
 
-### Variables que quitaremos con lo visto en la exploración
+### Variables que Quitaremos con lo Visto en la Exploración
 
 Se tienen que quitar, con completa seguridad, `jitter_ddp` y
 `shimmer_dda`, al tener exactamente 1 de correlación con una variable
@@ -1267,7 +1268,7 @@ razones vamos a omitir la variable.
 
 Evidentemente, `subject` tendrá que ser quitado en todos los modelos.
 
-### Regresión Múltiple y Modelos No Lineales
+### Con Todas las Variables
 
 Dejamos, a partir de ahora, a la explicabilidad de lado y nos vamos a
 centrar en predecir.
@@ -1323,10 +1324,13 @@ cat("MAE: ", round(mae_masacre, 4), "puntos\n")
 cat("MAPE:", round(mape_masacre, 2), "%\n")
 ```
 
-Este modelo, como era de esperar, no tiene buena pinta. Vamos a empezar
-con la selección de variables, usando el criterio de informacion de
-Akaike (AIC) de forma stepwise. Como AIC está orientado a predicción, es
-mejor que hacerlo con BIC para nosotros.
+Este modelo, como era de esperar, no tiene buena pinta.
+
+### Stepwise
+
+Vamos a empezar con la selección de variables, usando el criterio de
+informacion de Akaike (AIC) de forma stepwise. Como AIC está orientado a
+predicción, es mejor que hacerlo con BIC para nosotros.
 
 ```{r}
 # 1. Ejecutamos el algoritmo Stepwise (Dirección: ambos lados)
@@ -1371,6 +1375,11 @@ par(mfrow = c(2, 2)) # Para ver los 4 gráficos a la vez
 plot(modelo_stepwise)
 ```
 
+Podemos ver en estos gráficos un par de veces la observación nº1234, de
+la cuál hablamos en el EDA.
+
+### Seleccionando Manualmente Tras Hacer la Stepwise
+
 Vemos que sigue habiendo multicolinealidades muy fuertes, vamos a
 hacerlo manualmente enfocándonos primero en eso, ya que esta puede estar
 manipulando los p-valores. Vamos a eliminar `shimmer_apq_11` al ser la
@@ -1382,7 +1391,6 @@ modmult2 <- lm(formula = motor_UPDRS ~ age + sex + jitter_pct + jitter_abs +
       nhr + hnr + dfa + ppe, data = train_selection)
 summary(modmult2)
 vif(modmult2)
-
 ```
 
 Podemos observar los VIF disminuyendo aunque sigue quedando trabajo.
@@ -1556,7 +1564,7 @@ Vamos a tomar medidas de rendimiento:
 
 ```{r}
 pred_mult <- predict(modmult6, newdata = test_selection)
-resultados_step <- data.frame(real = test$motor_UPDRS, pred = pred_step)
+resultados_step <- data.frame(real = test$motor_UPDRS, pred = pred_mult)
 
 rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
 mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
@@ -1568,12 +1576,11 @@ cat("MAE: ", round(mae_step, 4), "\n")
 cat("MAPE:", round(mape_step, 2), "%\n")
 ```
 
-Vemos que el RMSE emperora pero vemos una mejora de multicolinealidad, y
-mejora el MAE y el MAPE. Pero aún así, en tema de supuestos seguimos con
-un problema pese a las mejoras en métricas. Es decir, sigue siendo
-inválido por este motivo. Podríamos haber usado regularización para
-selección de variables igual para reducir el VIF, pero vemos que tenemos
-problemas de relaciones mas que de correlacción entre predictores.
+Seguimos con problema de supuestos, incluso aunque haya bajado el RMSE y
+subido el MAPE (lo cual no es bueno pero bueno). Es decir, sigue siendo
+inválido. Podríamos haber usado regularización para selección de
+variables igual para reducir el VIF, pero vemos que tenemos problemas de
+relaciones mas que de correlacción entre predictores.
 
 Antes de pasar a modelos generalizados vamos a eliminar las variables
 mas "complicadas" (`ppe`, por ejemplo) y usar regularización para
@@ -1615,7 +1622,7 @@ El VIF da muy alto. Vamos a eliminar la relación.
 
 ```{r}
 pred_mult <- predict(modmult9, newdata = test_selection)
-resultados_step <- data.frame(real = test$motor_UPDRS, pred = pred_step)
+resultados_step <- data.frame(real = test$motor_UPDRS, pred = pred_mult)
 
 rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
 mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
@@ -1627,9 +1634,9 @@ cat("MAE: ", round(mae_step, 4), "\n")
 cat("MAPE:", round(mape_step, 2), "%\n")
 ```
 
-Bueno, consigue mejorar un poco el MAPE.
+Es parecido al anterior.
 
-### Regularización
+### Regularización (y Luego Lasso)
 
 Regularicemos los datos:
 
@@ -1689,7 +1696,7 @@ mae_lasso  <- mean(abs(resultados_lasso$real - resultados_lasso$predicho))
 mape_lasso <- mean(abs((resultados_lasso$real - resultados_lasso$predicho) / resultados_lasso$real)) * 100
 
 # --- EL VEREDICTO DEL LASSO ---
-cat("      MÉTRICAS MODELO LASSO (L1)        \n")
+cat("===MÉTRICAS MODELO LASSO (L1)===\n")
 cat("RMSE:", round(rmse_lasso, 4), "\n")
 cat("MAE: ", round(mae_lasso, 4), "\n")
 cat("MAPE:", round(mape_lasso, 2), "%\n")
@@ -1818,7 +1825,13 @@ posible heterocedasticidad, colas pesadas en el qqplot y residuos vs.
 valores ajustados mal para variar. No seguimos investigando, como
 dijimos al principio.
 
-## Modelos Lineales Generalizados
+------------------------------------------------------------------------
+
+## Modelos de Regresión Generalizada
+
+Como no tenemos datos de conteo, no vamos a aplicar Poisson.
+
+### Gamma
 
 Vamos a comenzar con una GAMMA, dado que sus valores son estricamente
 positivos, estan sesgados, lo que ayuda a las colas pesadas que vemos,
@@ -1952,25 +1965,20 @@ cat("MAPE Gamma:", mape_gamma, "%\n")
 cat("MAE Gama:",mae_gamma, "\n")
 ```
 
-Vemos que disminuye el RMSE, lo que indica que sus errores ya no son tan
-extremos, pero vemos un aumento en el error porcentual, lo que nos dice
-que los errores en promedio sí son mas grandes, aún sin llegar a grandes
-extremos lo que nos indica la bajada del RMSE. Si lo hubiésemos visto,
-aquí aplicaríamos suavizado.
+Vemos un RMSE y un MAPE más bajo que en los anteriores.
 
-------------------------------------------------------------------------
+Si lo hubiésemos visto antes de entregar el trabajo, aquí aplicaríamos
+suavizado.
 
-## Modelos de Regresión Generalizada
+### Regresión Logística
 
-Como no tenemos datos de conteo, no vamos a aplicar Poisson. Lo que
-vamos a aplicar, eso sí, es la regresión logística. Tenemos que
-binarizar el target con algún criterio. Después de investigar un poco
-por el internet, y teniendo en cuenta que no tenemos acceso a un
-experto, no existe un punto exacto en el valor del UPDRS en el cual se
-pueda decir que la gravedad del Parkinson es mucho mayor, y tampoco
-podemos saber si hay un punto que interese a los científicos. Así que
-nuestro criterio para binarizar será uno simple: 50% más bajos (0) y 50%
-más altos (1).
+Vamos a aplicar la regresión logística. Tenemos que binarizar el target
+con algún criterio. Después de investigar un poco por el internet, y
+teniendo en cuenta que no tenemos acceso a un experto, no existe un
+punto exacto en el valor del UPDRS en el cual se pueda decir que la
+gravedad del Parkinson es mucho mayor, y tampoco podemos saber si hay un
+punto que interese a los científicos. Así que nuestro criterio para
+binarizar será uno simple: 50% más bajos (0) y 50% más altos (1).
 
 ```{r}
 # hacemos la separacion
@@ -2028,7 +2036,8 @@ summary(modelo_logistico3)
 
 Ahora sí, no hay ningún predictor inútil. En este tipo de modelos no se
 puede usar R cuadrado, así que usaremos una matriz de confusión sobre
-las predicciones de test_b:
+las predicciones de test_b, y también sacaremos la R cuadrado de
+McFadden:
 
 ```{r}
 pscl::pR2(modelo_logistico3)["McFadden"]
@@ -2050,7 +2059,7 @@ El R cuadrado de McFadden tendría que estar entre 0.2 y 0.4 para que el
 modelo se pueda considerar bueno, y en este caso es \~0.07. Parece ser
 que este modelo es malo también.
 
-Veamos, por último, el área debajo de la curva (AOC):
+Veamos el área debajo de la curva (AOC):
 
 ```{r message=FALSE}
 roc_object <- roc(test_b$binario, preds)
@@ -2061,9 +2070,14 @@ Siendo que una buena discriminación según los apuntes es 0.8, podemos
 concluir que este modelo no es suficiente, pero que por lo menos es
 mejor que el azar.
 
+No existe una manera de hacer RMSE, MAE y MAPE en este modelo, gracias a
+que estamos hablando de una variable objetivo binaria. Lo más cercano
+que tenemos son los datos que obtuvimos después de usar la función
+`confusionMatrix`.
+
 ------------------------------------------------------------------------
 
-## Usando PCA para ver si algo mejora
+## Usando PCA Para Ver si Algo Mejora
 
 Llegados aquí ya si que tenemos tres opciones:
 
@@ -2263,19 +2277,19 @@ supuestos.
 
 ------------------------------------------------------------------------
 
-## Comparación y evaluación de modelos
+## Comparación y Evaluación de Modelos
 
 Aquí tenemos que usar nuestro modelo para tratar de predecir las
-muestras de `validation`. El modelo que usaremos, ya que estamos
-tratando de predecir lo mejor posible, es aquel que tiene los mejores
-AIC, R cuadrado ajustado, RMSE y MAPE. (medidas que hemos sacado a lo
-largo de este trabajo).
+muestras de val_selection. El modelo que usaremos, ya que estamos
+tratando de predecir lo mejor posible, es aquel que tiene los mejores R
+cuadrado ajustado, RMSE o MAPE. (medidas que hemos sacado a lo largo de
+este trabajo, algunas no pueden ser obtenidas de algunos modelos).
 
-Ese mejor modelo es (), que tiene los parámetros (). Vamos a probar el
+Ese mejor modelo es (), que tiene como parámetros (). Vamos a probar el
 modelo con val_selection, y veamos qué valores nos da:
 
 ```{r}
-# código aquí
+###
 ```
 
 ------------------------------------------------------------------------
@@ -2292,15 +2306,8 @@ otras formas de medir que nos ayuden a hacer las predicciones (por
 ejemplo, se podría hacer una especie de media de los valores medidos
 entre test UPDRS y test UPDRS a los pacientes para que así no haya
 tantos valores tan extendidos, o se les podría pedir hacer de forma más
-consistente las mediciones, todos los días en vez de aprox. una vez cada
-dos días de forma irregular).
+consistente las mediciones, todos los días en vez de aproximadamente más
+de una vez cada dos días de forma irregular).
 
-Y, si los hubíesemos visto, habríamos usado un modelo mixto (que habría
-dado un mejor resultado).
-
-------------------------------------------------------------------------
-
-### Cosas por hacer
-
-rmse: raíz cuadrada del mse, mae: error medio en valor absoluto y mape:
-porcentaje de lo anterior
+Y, si los hubíesemos visto, habríamos utilizado un modelo mixto (que
+habría dado un mejor resultado).
