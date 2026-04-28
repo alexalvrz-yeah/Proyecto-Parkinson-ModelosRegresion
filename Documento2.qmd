@@ -931,7 +931,6 @@ cat("RMSE:", round(rmse_simple, 4), "puntos UPDRS\n")
 cat("La media de UPDRS es : ",mean(test$motor_UPDRS),"puntos UPDRS\n")
 cat("Siendo los cuartiles (al principio min y al final el max) : ",summary(test$motor_UPDRS),"\n")
 cat("MAE:", round(mae_simple,2),"\n")
-cat("===============================\n")
 ```
 
 Por lo que vemos de error esperado podríamos estar tanto en el tercer,
@@ -1232,11 +1231,7 @@ Como era de esperar, no se cumplen los supuestos.
 
 ## Modelos no lineales y transformación de variables
 
-### PCA o Selección de Variables
-
-"super correladas has de quitarte, no hacer pca ya que preferirías
-mantener explicabilidad EXCEPTO si quiero predecir a fuego" "mantenerse
-consistente con el objetivo"
+### Selección de Variables
 
 #### Variables que quitaremos con lo visto en la exploración
 
@@ -1252,26 +1247,24 @@ futuros pacientes en los que se aplicará el modelo podrían estarlo,
 datos futuros podrían no tener esta medida, así que por estas dos
 razones vamos a omitir la variable.
 
-*empiezas un modelo con todas, usando info vas quitando las menos útiles
-y llegas a un modelo, luego haces un modelo con backwards/stepwise, con
-etc y luego comparar con AIC, BIC, Cp de Mallows...*
-
-*te quedas con uno.*
+Evidentemente, `subject` tendrá que ser quitado en todos los modelos. 
 
 ## Regresión Múltiple y Modelos No Lineales
 
-Respecto al tema de la autocorrelacción : bla bla bla
-
-Vamos a meter todas las variables a lo bruto y vamos a ir reduciendo las
-variables de forma progresiva, este primer modelo va a doler a los ojos
-mirarlo, se avisa de antemano
+Vamos a meter todas las variables a lo bruto (incluidas las dos que íbamos a
+quitar antes, por si acaso dan más información que las previas) y vamos a ir 
+reduciendo las variables de forma progresiva. Este primer modelo será, 
+probablemente muy malo.
 
 ```{r}
 train_selection <- train %>%
   dplyr::select(-subject, -test_time, -total_UPDRS) # Escribe los nombres exactos de tus columnas aquí
 
 test_selection <- test %>%
- dplyr:: select(-subject, -test_time, -total_UPDRS)
+ dplyr::select(-subject, -test_time, -total_UPDRS)
+
+val_selection <- val %>%
+  dplyr::select(-subject, -test_time, -total_UPDRS)
 ```
 
 ```{r}
@@ -1301,13 +1294,10 @@ mae_masacre  <- mean(abs(resultados_masacre$real - resultados_masacre$predicho),
 mape_masacre <- mean(abs((resultados_masacre$real - resultados_masacre$predicho) / resultados_masacre$real), na.rm = TRUE) * 100
 
 # --- RESULTADOS POR CONSOLA ---
-cat("\n========================================\n")
-cat("   ERROR DEL MODELO MÚLTIPLE MASIVO     \n")
-cat("========================================\n")
+cat("===ERROR DEL MODELO MÚLTIPLE MASIVO===\n")
 cat("RMSE:", round(rmse_masacre, 4), "puntos\n")
 cat("MAE: ", round(mae_masacre, 4), "puntos\n")
 cat("MAPE:", round(mape_masacre, 2), "%\n")
-cat("========================================\n")
 ```
 
 Bueno, no soy yo quién para juzgar pero buena pinta no tiene, vamos a
@@ -1672,13 +1662,10 @@ mae_lasso  <- mean(abs(resultados_lasso$real - resultados_lasso$predicho))
 mape_lasso <- mean(abs((resultados_lasso$real - resultados_lasso$predicho) / resultados_lasso$real)) * 100
 
 # --- EL VEREDICTO DEL LASSO ---
-cat("\n========================================\n")
 cat("      MÉTRICAS MODELO LASSO (L1)        \n")
-cat("========================================\n")
 cat("RMSE:", round(rmse_lasso, 4), "\n")
 cat("MAE: ", round(mae_lasso, 4), "\n")
 cat("MAPE:", round(mape_lasso, 2), "%\n")
-cat("========================================\n")
 ```
 
 ```{r}
@@ -2237,12 +2224,9 @@ rmse_val <- sqrt(mean((resultados$real - resultados$predicho)^2, na.rm = TRUE))
 mape_val <- mean(abs((resultados$real - resultados$predicho) / resultados$real), na.rm = TRUE) * 100
 
 # --- EL VEREDICTO ---
-cat("\n==================================\n")
 cat("   RESULTADOS EN DATOS DE TEST    \n")
-cat("==================================\n")
 cat("RMSE:", round(rmse_val, 4), "puntos UPDRS\n")
 cat("MAPE:", round(mape_val, 2), "%\n")
-cat("==================================\n")
 ```
 
 ```{r}
@@ -2506,6 +2490,25 @@ supuestos.
 
 ------------------------------------------------------------------------
 
+## Prueba final con Validation
+
+Aquí tenemos que usar nuestro modelo para tratar de predecir las muestras de
+`validation`. El modelo que usaremos, ya que estamos tratando de predecir lo
+mejor posible, es aquel que tiene los mejores AIC y R cuadrado (si son
+los valores más altos son los mejores prediciendo).
+
+```{r}
+# aqui conseguimos los valores para escoger
+```
+
+Ese mejor modelo es (). Vamos a probar el modelo con val_selection:
+
+```{r}
+# código aquí
+```
+
+------------------------------------------------------------------------
+
 ## Conclusiones y Trabajo a Futuro
 
 El valor de `motor_UPRDS` es prácticamente imposible de predecir a
@@ -2520,6 +2523,10 @@ entre test UPDRS y test UPDRS a los pacientes para que así no haya
 tantos valores tan extendidos, o se les podría pedir hacer de forma más
 consistente las mediciones, todos los días en vez de aprox. una vez cada
 dos días de forma irregular).
+
+Y, si los hubíesemos visto, habríamos usado un modelo mixto (que sí habría
+dado un buen resultado). Resulta que los modelos mixtos son parecidos a lo
+de "sacar una media de los grupos".
 
 ------------------------------------------------------------------------
 
@@ -2538,3 +2545,10 @@ escrito.
 Añadir más a las conclusiones.
 
 Cambiar algún que otro color y alguna representación.
+
+Añadir un "no se siguen estudiando los gráficos porque no es lógico, no 
+se cumplen los supuestos".
+
+Arreglar lo del PCA.
+
+Quitar lo que no entendemos para así poder defender bien.
