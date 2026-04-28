@@ -1695,7 +1695,6 @@ rmse_lasso <- sqrt(mean((resultados_lasso$real - resultados_lasso$predicho)^2))
 mae_lasso  <- mean(abs(resultados_lasso$real - resultados_lasso$predicho))
 mape_lasso <- mean(abs((resultados_lasso$real - resultados_lasso$predicho) / resultados_lasso$real)) * 100
 
-# --- EL VEREDICTO DEL LASSO ---
 cat("===MÉTRICAS MODELO LASSO (L1)===\n")
 cat("RMSE:", round(rmse_lasso, 4), "\n")
 cat("MAE: ", round(mae_lasso, 4), "\n")
@@ -2044,6 +2043,7 @@ McFadden:
 ```{r}
 pscl::pR2(modelo_logistico3)["McFadden"]
 
+# codigo de un ejemplo del aula virtual, cambiado para que funcione aquí
 preds = predict(modelo_logistico3, test_b, type='response')
 summary(preds)
 preds_bin <- factor(ifelse(preds >= 0.5, 1, 0))
