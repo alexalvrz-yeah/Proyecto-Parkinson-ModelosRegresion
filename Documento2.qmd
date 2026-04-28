@@ -1347,7 +1347,7 @@ print(sort(vif_step, decreasing = TRUE))
 
 # 4. MÉTRICAS DE ERROR EN TEST
 pred_step <- predict(modelo_stepwise, newdata = test_selection)
-resultados_step <- data.frame(real = test$total_UPDRS, pred = pred_step)
+resultados_step <- data.frame(real = test_selection$motor_UPDRS, pred = pred_step)
 
 rmse_step <- sqrt(mean((resultados_step$real - resultados_step$pred)^2, na.rm = TRUE))
 mae_step  <- mean(abs(resultados_step$real - resultados_step$pred), na.rm = TRUE)
@@ -1958,14 +1958,16 @@ pred_gamma <- predict(modelo_gamma, newdata = probar_sucio, type = "response")
 # Métricas
 rmse_gamma <- sqrt(mean((probar_sucio$motor_UPDRS - pred_gamma)^2))
 mae_gamma  <- mean(abs(probar_sucio$motor_UPDRS - pred_gamma))
-mape_gamma <- mean(abs((probar_sucio$motor_UPDRS - pred_gamma) / test_selection$motor_UPDRS)) * 100
+mape_gamma <- mean(abs((probar_sucio$motor_UPDRS - pred_gamma) / probar_sucio$motor_UPDRS)) * 100
 
 cat("RMSE Gamma:", rmse_gamma, "\n")
 cat("MAPE Gamma:", mape_gamma, "%\n")
 cat("MAE Gama:",mae_gamma, "\n")
 ```
 
-Vemos un RMSE y un MAPE más bajo que en los anteriores.
+Vemos un RMSE y un MAPE más bajo que en los anteriores. La gráfica nos
+dice lo de siempre: los supuestos no se cumplen (véase lo de normal q-q
+plot).
 
 Si lo hubiésemos visto antes de entregar el trabajo, aquí aplicaríamos
 suavizado.
@@ -2078,6 +2080,10 @@ que tenemos son los datos que obtuvimos después de usar la función
 ------------------------------------------------------------------------
 
 ## Usando PCA Para Ver si Algo Mejora
+
+Esta sección está un poco descolocada, ya que no aparece en la rúbrica,
+pero ha sido añadida porque tenía que ser probado viendo que todo lo
+demás falló y que no nos importa la explicabilidad.
 
 Llegados aquí ya si que tenemos tres opciones:
 
@@ -2281,33 +2287,71 @@ supuestos.
 
 Aquí tenemos que usar nuestro modelo para tratar de predecir las
 muestras de val_selection. El modelo que usaremos, ya que estamos
-tratando de predecir lo mejor posible, es aquel que tiene los mejores R
-cuadrado ajustado, RMSE o MAPE. (medidas que hemos sacado a lo largo de
-este trabajo, algunas no pueden ser obtenidas de algunos modelos).
+tratando de predecir lo mejor posible, es aquel que tiene los mejores
+AIC (dentro de los propios modelos), R cuadrado ajustado, RMSE o MAPE.
+(medidas que hemos sacado a lo largo de este trabajo, algunas no pueden
+ser obtenidas de algunos modelos).
 
-Ese mejor modelo es (), que tiene como parámetros (). Vamos a probar el
-modelo con val_selection, y veamos qué valores nos da:
+Ese mejor modelo es el Gamma, que muestra los mejores MAPE y RMSE, por
+mucho que no pueda sacar una R cuadrada. Vamos a probar el modelo con
+val_selection, y veamos qué valores nos da:
 
 ```{r}
-###
+# aquí no usamos val selection porque está hecho de otra forma este modelo
+# usamos en realidad validar_sucio
+pred_gamma2 <- predict(modelo_gamma, newdata = validar_sucio, type = "response")
+
+# Métricas
+rmse_gamma2 <- sqrt(mean((validar_sucio$motor_UPDRS - pred_gamma2)^2))
+mae_gamma2  <- mean(abs(validar_sucio$motor_UPDRS - pred_gamma2))
+mape_gamma2 <- mean(abs((validar_sucio$motor_UPDRS - pred_gamma2) / validar_sucio$motor_UPDRS)) * 100
+
+cat("RMSE Gamma:", rmse_gamma2, "\n")
+cat("MAPE Gamma:", mape_gamma2, "%\n")
+cat("MAE Gamma:",mae_gamma2, "\n")
 ```
+
+Parece que en esta partición es peor. Traigamos al segundo mejor, el
+stepwise previo a quitar variables:
+
+```{r}
+pred_step2 <- predict(modelo_stepwise, newdata = val_selection)
+resultados_step2 <- data.frame(real = val_selection$motor_UPDRS, pred = pred_step2)
+
+rmse_step2 <- sqrt(mean((resultados_step2$real - resultados_step2$pred)^2, na.rm = TRUE))
+mae_step2  <- mean(abs(resultados_step2$real - resultados_step2$pred), na.rm = TRUE)
+mape_step2 <- mean(abs((resultados_step2$real - resultados_step2$pred) / resultados_step2$real), na.rm = TRUE) * 100
+
+cat("RMSE Stepwise:", rmse_step2, "\n")
+cat("MAPE Stepwise:", mape_step2, "%\n")
+cat("MAE Stepwise:", mae_step2, "\n")
+```
+
+El stepwise parece ser el mejor modelo, porque el MAPE es casi el mismo
+pero el RMSE es mejor. Eso sí, puede que con tanto lío de tipos
+distintos de particiones el RMSE haya terminado perdiendo significado.
+Puede que el modelo stepwise al que le quitamos manualmente algunas
+variables sea mejor a la hora de aplicarlo, pero en todo caso todos son
+extremadamente malos y se tendría que hacer otro tipo de modelo.
 
 ------------------------------------------------------------------------
 
 ## Conclusiones y Trabajo a Futuro
 
-El valor de `motor_UPRDS` es prácticamente imposible de predecir a
-partir de nuestros datos. Los R cuadrados son bajísimos, indicando que
-no somos capaces de explicar la mayor parte del dataset. Ni utilizando
-PCA hemos sido capaces de cumplir con los supuestos del modelo.
+-   El valor de `motor_UPRDS` es prácticamente imposible de predecir a
+    partir de nuestros datos y nuestros conocimientos. Los R cuadrados
+    (y similares) son bajísimos, indicando que no somos capaces de
+    explicar la mayor parte del dataset. Ni utilizando PCA hemos sido
+    capaces de cumplir con los supuestos del modelo.
 
-En cuanto a trabajo a futuro, se tendrían que encontrar más variables u
-otras formas de medir que nos ayuden a hacer las predicciones (por
-ejemplo, se podría hacer una especie de media de los valores medidos
-entre test UPDRS y test UPDRS a los pacientes para que así no haya
-tantos valores tan extendidos, o se les podría pedir hacer de forma más
-consistente las mediciones, todos los días en vez de aproximadamente más
-de una vez cada dos días de forma irregular).
+-   En cuanto a trabajo a futuro, se tendrían que encontrar más
+    variables u otras formas de medir que nos ayuden a hacer las
+    predicciones (por ejemplo, se podría hacer una especie de media de
+    los valores medidos entre test UPDRS y test UPDRS a los pacientes
+    para que así no haya tantos valores tan extendidos, o se les podría
+    pedir hacer de forma más consistente las mediciones, todos los días
+    en vez de aproximadamente más de una vez cada dos días de forma
+    irregular).
 
-Y, si los hubíesemos visto, habríamos utilizado un modelo mixto (que
-habría dado un mejor resultado).
+-   Si los hubíesemos visto, habríamos utilizado un modelo mixto (que
+    habría dado un mejor resultado).
