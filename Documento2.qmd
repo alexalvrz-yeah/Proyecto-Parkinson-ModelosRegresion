@@ -2504,23 +2504,22 @@ variables, sino estructural. Dado el caracter de mediciones a lo largo
 del tiempo otorgándole una clara dependencia temporal que rompe los
 supuestos.
 
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
 ------------------------------------------------------------------------
 
 ## Conclusiones y Trabajo a Futuro
 
-aaaaa
+El valor de `motor_UPRDS` es prácticamente imposible de predecir a
+partir de nuestros datos. Los R cuadrados son bajísimos, indicando que
+no somos capaces de explicar la mayor parte del dataset. Ni utilizando
+PCA hemos sido capaces de cumplir con los supuestos del modelo.
+
+En cuanto a trabajo a futuro, se tendrían que encontrar más variables u
+otras formas de medir que nos ayuden a hacer las predicciones (por
+ejemplo, se podría hacer una especie de media de los valores medidos
+entre test UPDRS y test UPDRS a los pacientes para que así no haya
+tantos valores tan extendidos, o se les podría pedir hacer de forma más
+consistente las mediciones, todos los días en vez de aprox. una vez cada
+dos días de forma irregular).
 
 ------------------------------------------------------------------------
 
@@ -2531,4 +2530,11 @@ aaaaa
 <https://www.nature.com/articles/npre.2009.3920.1> paper original
 
 Antes de hacer las cosas con las otras particiones hemos de limpiarlas
-con las mismas transformaciones que hicimos en train.
+con las mismas transformaciones que hicimos en train (HECHO).
+
+Limpiar todo el texto y asegurarse de que el código esté correctamente
+escrito.
+
+Añadir más a las conclusiones.
+
+Cambiar algún que otro color y alguna representación.
