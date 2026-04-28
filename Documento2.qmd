@@ -2328,8 +2328,9 @@ cat("MAE Stepwise:", mae_step2, "\n")
 ```
 
 El stepwise parece ser el mejor modelo, porque el MAPE es casi el mismo
-pero el RMSE es mejor. Eso sí, puede que con tanto lío de tipos
-distintos de particiones el RMSE haya terminado perdiendo significado.
+pero el RMSE es mejor, lo que nos sugiere los errores siguen siendo iguales
+en media, pero comete menos errores extremos. Eso sí, puede que con tanto 
+lío de tipos distintos de particiones el RMSE haya terminado perdiendo significado.
 Puede que el modelo stepwise al que le quitamos manualmente algunas
 variables sea mejor a la hora de aplicarlo, pero en todo caso todos son
 extremadamente malos y se tendría que hacer otro tipo de modelo.
@@ -2364,9 +2365,9 @@ La parte que ha hecho cada integrante del grupo, y el número de este.
 
 Alejandro Álvarez Segoviano: El GitHub del proyecto, contribuciones
 varias en las primeras secciones, la mitad de la aplicación del modelo
-de regresión lineal simple, modelos no lineales y transformación de
-variables, modelo gamma, sección en la que se aplica la PCA, y mucha
-ayuda en la teoría aplicada del trabajo.
+de regresión lineal simple, modelos de regresión múltiple, modelos no 
+lineales y transformación de variables, modelo gamma, sección en la que
+se aplica la PCA, y mucha ayuda en la teoría aplicada del trabajo.
 
 Ivo Reguero Ferrer: Introducción, lectura y descripción de datos,
 preparación de datos, exploración de datos, la mitad de la aplicación
