@@ -58,6 +58,9 @@ library(MASS)
 library(car)
 library(glmnet)
 library(mgcv)
+library(pscl)
+library(caret)
+library(pROC)
 ```
 
 ## Lectura y Descripción de Datos
@@ -1966,16 +1969,101 @@ por el internet, y teniendo en cuenta que no tenemos acceso a un
 experto, no existe un punto exacto en el valor del UPDRS en el cual se
 pueda decir que la gravedad del Parkinson es mucho mayor, y tampoco
 podemos saber si hay un punto que interese a los científicos. Así que
-nuestro criterio para binarizar será uno simple: 50% más bajos y 50% más
-altos.
+nuestro criterio para binarizar será uno simple: 50% más bajos (0) y 50%
+más altos (1).
 
 ```{r}
-# por hacer
+# hacemos la separacion
+binarizado <- factor(ifelse(train$motor_UPDRS >= median(train$motor_UPDRS),1,0))
+# misma transformación en los otros dos
+binarizado_test <- factor(ifelse(test$motor_UPDRS >= median(train$motor_UPDRS),1,0))
+binarizado_val <- factor(ifelse(val$motor_UPDRS >= median(train$motor_UPDRS),1,0))
+# comprobamos el ratio de binarizado
+summary(binarizado) # es casi un 50/50, efectivamente
+summary(binarizado_test)
+summary(binarizado_val)
 ```
+
+Con las medias hechas, podemos ver que en train sí que es un 50/50 y que
+en los otros dos no lo son exactamente, pero es parte de tener que hacer
+que las tres particiones sufran la misma transformación.
+
+```{r}
+# quito motor_UPDRS
+train_b <- train_selection[, -3] 
+test_b <- test_selection[, -3]
+val_b <- val_selection[, -3]
+# añado el binario
+train_b$binario <- binarizado
+test_b$binario <- binarizado_test
+val_b$binario <- binarizado_val
+```
+
+Vamos a hacer el modelo, que al principio tendrá todas las variables:
+
+```{r}
+modelo_logistica <- glm(binario~., family="binomial", data=train_b) # family binomial es para hacer una regresión logística
+summary(modelo_logistica)
+car::vif(modelo_logistica)
+```
+
+El VIF nos dice lo que esperábamos, que nos sobran variables. Vamos
+quitando con stepwise:
+
+```{r}
+modelo_stepwise_logistico <- step(modelo_logistica, direction = "both", trace = 1)
+
+summary(modelo_stepwise_logistico)
+```
+
+Quitamos `rpde` porque su p-valor es alto:
+
+```{r}
+modelo_logistico3 <- glm(formula = binario ~ age + sex + jitter_abs + jitter_ddp + 
+    shimmer + shimmer_db + shimmer_apq3 + shimmer_apq5 + shimmer_apq11 + 
+    hnr + dfa + ppe, family = "binomial", data = train_b)
+
+summary(modelo_logistico3)
+```
+
+Ahora sí, no hay ningún predictor inútil. En este tipo de modelos no se
+puede usar R cuadrado, así que usaremos una matriz de confusión sobre
+las predicciones de test_b:
+
+```{r}
+pscl::pR2(modelo_logistico3)["McFadden"]
+
+preds = predict(modelo_logistico3, test_b, type='response')
+summary(preds)
+preds_bin <- factor(ifelse(preds >= 0.5, 1, 0))
+confusionMatrix(preds_bin, test_b$binario, positive = '1',mode='everything')
+```
+
+La predicción es mejor que el azar, ya que acierta un \~63% de las
+veces, pero eso sigue siendo un valor bastante malo. Algo curioso es que
+tenemos una cantidad de falsos positivos y falsos negativos muy cercana,
+cosa que indica el p-valor del test de Mcnemar (si el p-valor es alto,
+entonces no se puede negar que la probabilidad de un falso positivo sea
+la misma que la de un falso negativo).
+
+El R cuadrado de McFadden tendría que estar entre 0.2 y 0.4 para que el
+modelo se pueda considerar bueno, y en este caso es \~0.07. Parece ser
+que este modelo es malo también.
+
+Veamos, por último, el área debajo de la curva (AOC):
+
+```{r message=FALSE}
+roc_object <- roc(test_b$binario, preds)
+cat("Area under the curve:", auc(roc_object))
+```
+
+Siendo que una buena discriminación según los apuntes es 0.8, podemos
+concluir que este modelo no es suficiente, pero que por lo menos es
+mejor que el azar.
 
 ------------------------------------------------------------------------
 
-## Usando PCA como último recurso
+## Usando PCA para ver si algo mejora
 
 Llegados aquí ya si que tenemos tres opciones:
 
@@ -2207,31 +2295,12 @@ tantos valores tan extendidos, o se les podría pedir hacer de forma más
 consistente las mediciones, todos los días en vez de aprox. una vez cada
 dos días de forma irregular).
 
-Y, si los hubíesemos visto, habríamos usado un modelo mixto (que sí
-habría dado un buen resultado). Resulta que los modelos mixtos son
-parecidos a lo de "sacar una media de los grupos".
+Y, si los hubíesemos visto, habríamos usado un modelo mixto (que habría
+dado un mejor resultado).
 
 ------------------------------------------------------------------------
 
 ### Cosas por hacer
-
-"La gracia es ir probando cosas, no hacer el mejor modelo".
-
-<https://www.nature.com/articles/npre.2009.3920.1> paper original
-
-Limpiar todo el texto y asegurarse de que el código esté correctamente
-escrito.
-
-Añadir más a las conclusiones.
-
-Cambiar algún que otro color y alguna representación.
-
-Añadir un "no se siguen estudiando los gráficos porque no es lógico, no
-se cumplen los supuestos".
-
-Arreglar lo del PCA.
-
-Quitar lo que no entendemos para así poder defender bien.
 
 rmse: raíz cuadrada del mse, mae: error medio en valor absoluto y mape:
 porcentaje de lo anterior
